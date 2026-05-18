@@ -9,6 +9,7 @@ class GameConfig:
 
     initial_lives: int = 18
     critical_wounds_limit: int = 3
+    color_effects_enabled: bool = True
     cards_per_player: int = 3
     min_players: int = 2
     max_players: int = 4

@@ -44,6 +44,7 @@ def calculate_base_damage(
     player: PlayerState,
     card: Card,
     received_critical_wound: bool,
+    color_effects_enabled: bool = True,
 ) -> int:
     """Calculate life damage from a player's own revealed card."""
 
@@ -51,7 +52,7 @@ def calculate_base_damage(
         return 0
 
     damage = card.value
-    if card.color == player.color:
+    if color_effects_enabled and card.color == player.color:
         damage -= 1
 
     return max(1, damage)
@@ -61,6 +62,7 @@ def calculate_extra_damage(
     players: PlayerCollection,
     selected_cards: Mapping[int, Card],
     critical_wound_player_ids: set[int],
+    color_effects_enabled: bool = True,
 ) -> dict[int, int]:
     """Calculate cumulative extra damage from opponent-color cards.
 
@@ -69,6 +71,8 @@ def calculate_extra_damage(
 
     player_map = _players_by_id(players)
     extra_damage = {player_id: 0 for player_id in player_map}
+    if not color_effects_enabled:
+        return extra_damage
 
     for source_id, card in selected_cards.items():
         source = player_map[source_id]
@@ -90,10 +94,16 @@ def apply_color_effects(
     players: PlayerCollection,
     selected_cards: Mapping[int, Card],
     critical_wound_player_ids: set[int],
+    color_effects_enabled: bool = True,
 ) -> dict[int, int]:
     """Backward-compatible wrapper for color effect damage."""
 
-    return calculate_extra_damage(players, selected_cards, critical_wound_player_ids)
+    return calculate_extra_damage(
+        players,
+        selected_cards,
+        critical_wound_player_ids,
+        color_effects_enabled=color_effects_enabled,
+    )
 
 
 def apply_life_loss(player: PlayerState, amount: int) -> None:

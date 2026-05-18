@@ -9,6 +9,7 @@ from typing import Any
 
 from sotto_soglia import __version__
 from sotto_soglia.models import EliminationReason, PlayerState
+from sotto_soglia.parametric import ParametricSimulationResult
 from sotto_soglia.simulation import SimulationResult
 
 
@@ -80,6 +81,47 @@ def export_strategy_tournament_result(
         paths["strategy_tournament_lineups"],
         tournament_result,
     )
+
+    return paths
+
+
+def export_parametric_simulation_result(
+    parametric_result: ParametricSimulationResult,
+    output_dir: str | Path,
+) -> dict[str, Path]:
+    """Write compact parametric export files and return their paths."""
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    paths = {
+        "parametric_stats": output_path / "parametric_stats.json",
+        "parametric_summary": output_path / "parametric_summary.csv",
+    }
+
+    stats_data = {
+        "players_count": parametric_result.players_count,
+        "games_per_config": parametric_result.games_per_config,
+        "tested_configs": parametric_result.tested_configs,
+        "total_games": parametric_result.total_games,
+        "base_seed": parametric_result.base_seed,
+        "baseline_config": parametric_result.baseline_config,
+        "config_results": [
+            {
+                "config_id": config_result.config_id,
+                "seed": config_result.seed,
+                "initial_lives": config_result.initial_lives,
+                "critical_wounds_limit": config_result.critical_wounds_limit,
+                "color_effects_enabled": config_result.color_effects_enabled,
+                "is_baseline": config_result.is_baseline,
+                "aggregate_stats": config_result.aggregate_stats,
+            }
+            for config_result in parametric_result.config_results
+        ],
+    }
+
+    write_json(paths["parametric_stats"], stats_data)
+    write_parametric_summary_csv(paths["parametric_summary"], parametric_result)
 
     return paths
 
@@ -201,6 +243,69 @@ def write_strategy_tournament_lineups_csv(
                     "games_count": lineup_result.simulation_result.games_count,
                     "average_rounds": f"{stats['average_rounds']:.2f}",
                     "draw_count": stats["draw_count"],
+                    "wins_by_strategy": serialize_name_count_map(
+                        stats["wins_by_strategy"]
+                    ),
+                }
+            )
+
+
+def write_parametric_summary_csv(
+    path: str | Path,
+    parametric_result: ParametricSimulationResult,
+) -> None:
+    """Write one CSV row per tested parametric configuration."""
+
+    fieldnames = [
+        "config_id",
+        "is_baseline",
+        "seed",
+        "players_count",
+        "games_count",
+        "initial_lives",
+        "critical_wounds_limit",
+        "color_effects_enabled",
+        "average_rounds",
+        "min_rounds",
+        "max_rounds",
+        "draw_count",
+        "draw_rate",
+        "eliminations_by_lives",
+        "eliminations_by_critical_wounds",
+        "average_winner_lives",
+        "average_winner_critical_wounds",
+        "wins_by_strategy",
+    ]
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for config_result in parametric_result.config_results:
+            stats = config_result.aggregate_stats
+            writer.writerow(
+                {
+                    "config_id": config_result.config_id,
+                    "is_baseline": config_result.is_baseline,
+                    "seed": config_result.seed,
+                    "players_count": parametric_result.players_count,
+                    "games_count": parametric_result.games_per_config,
+                    "initial_lives": config_result.initial_lives,
+                    "critical_wounds_limit": config_result.critical_wounds_limit,
+                    "color_effects_enabled": config_result.color_effects_enabled,
+                    "average_rounds": f"{stats['average_rounds']:.2f}",
+                    "min_rounds": stats["min_rounds"],
+                    "max_rounds": stats["max_rounds"],
+                    "draw_count": stats["draw_count"],
+                    "draw_rate": f"{stats['draw_rate']:.6f}",
+                    "eliminations_by_lives": stats["eliminations_by_lives"],
+                    "eliminations_by_critical_wounds": stats[
+                        "eliminations_by_critical_wounds"
+                    ],
+                    "average_winner_lives": f"{stats['average_winner_lives']:.2f}",
+                    "average_winner_critical_wounds": (
+                        f"{stats['average_winner_critical_wounds']:.2f}"
+                    ),
                     "wins_by_strategy": serialize_name_count_map(
                         stats["wins_by_strategy"]
                     ),

@@ -3,10 +3,15 @@
 import argparse
 
 from sotto_soglia.exporters import (
+    export_parametric_simulation_result,
     export_simulation_result,
     export_strategy_tournament_result,
 )
 from sotto_soglia.models import Color
+from sotto_soglia.parametric import (
+    ParametricSimulationResult,
+    ParametricSimulationRunner,
+)
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
 from sotto_soglia.strategies import AVAILABLE_STRATEGIES, create_strategy
 from sotto_soglia.tournament import StrategyTournamentResult, StrategyTournamentRunner
@@ -58,6 +63,53 @@ def format_simulation_summary(result: SimulationResult) -> str:
         rate = stats["win_rate_by_strategy"].get(strategy_name, 0.0)
         lines.append(f"- {strategy_name}: {wins} wins ({rate * 100:.2f}%)")
 
+    return "\n".join(lines)
+
+
+def format_parametric_summary(
+    result: ParametricSimulationResult,
+    strategy_setup: str,
+) -> str:
+    """Format parametric simulation stats for terminal output."""
+
+    lines = [
+        "Sotto Soglia Parametric Simulation",
+        f"Players: {result.players_count}",
+        f"Games per config: {result.games_per_config}",
+        f"Tested configs: {result.tested_configs}",
+        f"Total games: {result.total_games}",
+        f"Base seed: {result.base_seed}",
+        f"Strategy setup: {strategy_setup}",
+        "",
+        "Results by configuration:",
+        (
+            "ID | Lives | Critical Wounds | Color Effects | Avg Rounds | Draw % | "
+            "Life Eliminations | Critical Eliminations | Avg Winner Lives | "
+            "Avg Winner CW"
+        ),
+    ]
+
+    for config_result in result.config_results:
+        stats = config_result.aggregate_stats
+        marker = "* " if config_result.is_baseline else "  "
+        color_effects = "ON" if config_result.color_effects_enabled else "OFF"
+        lines.append(
+            (
+                f"{marker}{config_result.config_id:02d} | "
+                f"{config_result.initial_lives} | "
+                f"{config_result.critical_wounds_limit} | "
+                f"{color_effects} | "
+                f"{stats['average_rounds']:.2f} | "
+                f"{stats['draw_rate'] * 100:.2f}% | "
+                f"{stats['eliminations_by_lives']} | "
+                f"{stats['eliminations_by_critical_wounds']} | "
+                f"{stats['average_winner_lives']:.2f} | "
+                f"{stats['average_winner_critical_wounds']:.2f}"
+            )
+        )
+
+    lines.append("")
+    lines.append("* baseline = 18 lives / 3 critical wounds / color effects ON")
     return "\n".join(lines)
 
 
@@ -118,6 +170,40 @@ def build_strategies_from_args(args: argparse.Namespace):
     return create_strategy(args.strategy or "random")
 
 
+def build_strategy_names_from_args(args: argparse.Namespace) -> str | list[str]:
+    """Return strategy names from parsed CLI arguments."""
+
+    if args.strategy and args.strategies:
+        raise ValueError("Use either --strategy or --strategies, not both")
+
+    if args.strategies:
+        if len(args.strategies) != args.players:
+            raise ValueError("--strategies must provide one strategy per player")
+        return list(args.strategies)
+
+    return args.strategy or "random"
+
+
+def parse_color_effects_values(value: str) -> list[bool]:
+    """Parse the parametric color-effects option."""
+
+    if value == "both":
+        return [True, False]
+    if value == "on":
+        return [True]
+    if value == "off":
+        return [False]
+    raise ValueError("--color-effects must be one of: both, on, off")
+
+
+def format_strategy_setup(strategy_names: str | list[str]) -> str:
+    """Format strategy settings for terminal output."""
+
+    if isinstance(strategy_names, str):
+        return strategy_names
+    return ", ".join(strategy_names)
+
+
 def main() -> None:
     """Parse CLI arguments and run aggregate simulations."""
 
@@ -143,6 +229,31 @@ def main() -> None:
         help="Counterbalanced tournament strategies, one per player.",
     )
     parser.add_argument(
+        "--parametric",
+        action="store_true",
+        help="Run a parametric balance simulation grid.",
+    )
+    parser.add_argument(
+        "--lives-values",
+        nargs="+",
+        type=int,
+        default=[15, 18, 20],
+        help="Initial lives values tested in parametric mode.",
+    )
+    parser.add_argument(
+        "--critical-wounds-values",
+        nargs="+",
+        type=int,
+        default=[2, 3, 4],
+        help="Critical wound limits tested in parametric mode.",
+    )
+    parser.add_argument(
+        "--color-effects",
+        choices=["both", "on", "off"],
+        default="both",
+        help="Color effects values tested in parametric mode.",
+    )
+    parser.add_argument(
         "--export",
         action="store_true",
         help="Export simulation results to CSV and JSON files.",
@@ -154,6 +265,37 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    if args.parametric:
+        if args.tournament_strategies:
+            parser.error("Parametric tournament is not implemented yet.")
+
+        try:
+            strategy_names = build_strategy_names_from_args(args)
+            result = ParametricSimulationRunner().run(
+                players_count=args.players,
+                games_per_config=args.games,
+                seed=args.seed,
+                initial_lives_values=args.lives_values,
+                critical_wounds_values=args.critical_wounds_values,
+                color_effects_values=parse_color_effects_values(args.color_effects),
+                strategy_names=strategy_names,
+            )
+        except ValueError as error:
+            parser.error(str(error))
+
+        print(format_parametric_summary(result, format_strategy_setup(strategy_names)))
+
+        if args.export:
+            exported_files = export_parametric_simulation_result(
+                result,
+                args.output_dir,
+            )
+            print("")
+            print("Exported files:")
+            for path in exported_files.values():
+                print(f"- {path}")
+        return
+
     if args.tournament_strategies:
         if args.strategy or args.strategies:
             parser.error(

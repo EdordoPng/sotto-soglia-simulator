@@ -84,6 +84,7 @@ def resolve_round(
             player_map[player_id],
             card,
             player_id in critical_wound_player_ids,
+            color_effects_enabled=config.color_effects_enabled,
         )
         for player_id, card in selected_cards.items()
     }
@@ -92,6 +93,7 @@ def resolve_round(
         player_map,
         selected_cards,
         critical_wound_player_ids,
+        color_effects_enabled=config.color_effects_enabled,
     )
 
     total_damage_by_player = {
