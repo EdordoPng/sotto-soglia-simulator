@@ -24,6 +24,8 @@ def test_statistic_aggregator_returns_required_fields():
     assert 0 <= stats["draw_rate"] <= 1
     assert "wins_by_player_id" in stats
     assert "wins_by_color" in stats
+    assert "wins_by_strategy" in stats
+    assert "win_rate_by_strategy" in stats
     assert "eliminations_by_lives" in stats
     assert "eliminations_by_critical_wounds" in stats
     assert "average_winner_lives" in stats

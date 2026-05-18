@@ -5,6 +5,7 @@ import argparse
 from sotto_soglia.exporters import export_simulation_result
 from sotto_soglia.models import Color
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
+from sotto_soglia.strategies import AVAILABLE_STRATEGIES, create_strategy
 
 
 def format_simulation_summary(result: SimulationResult) -> str:
@@ -47,7 +48,27 @@ def format_simulation_summary(result: SimulationResult) -> str:
         rate = stats["win_rate_by_color"].get(color.name, 0.0)
         lines.append(f"- {color.name}: {wins} wins ({rate * 100:.2f}%)")
 
+    lines.extend(["", "Win rate by strategy:"])
+    for strategy_name in sorted(stats["wins_by_strategy"]):
+        wins = stats["wins_by_strategy"].get(strategy_name, 0)
+        rate = stats["win_rate_by_strategy"].get(strategy_name, 0.0)
+        lines.append(f"- {strategy_name}: {wins} wins ({rate * 100:.2f}%)")
+
     return "\n".join(lines)
+
+
+def build_strategies_from_args(args: argparse.Namespace):
+    """Create strategy instances from parsed CLI arguments."""
+
+    if args.strategy and args.strategies:
+        raise ValueError("Use either --strategy or --strategies, not both")
+
+    if args.strategies:
+        if len(args.strategies) != args.players:
+            raise ValueError("--strategies must provide one strategy per player")
+        return [create_strategy(name) for name in args.strategies]
+
+    return create_strategy(args.strategy or "random")
 
 
 def main() -> None:
@@ -57,6 +78,17 @@ def main() -> None:
     parser.add_argument("--players", type=int, default=4, help="Number of players.")
     parser.add_argument("--games", type=int, default=1, help="Number of games to simulate.")
     parser.add_argument("--seed", type=int, default=0, help="Base random seed.")
+    parser.add_argument(
+        "--strategy",
+        choices=sorted(AVAILABLE_STRATEGIES),
+        help="Strategy used by all players.",
+    )
+    parser.add_argument(
+        "--strategies",
+        nargs="+",
+        choices=sorted(AVAILABLE_STRATEGIES),
+        help="One strategy per player, in player id order.",
+    )
     parser.add_argument(
         "--export",
         action="store_true",
@@ -69,11 +101,16 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    try:
+        strategies = build_strategies_from_args(args)
+    except ValueError as error:
+        parser.error(str(error))
 
     result = SimulationRunner().run(
         players_count=args.players,
         games_count=args.games,
         seed=args.seed,
+        strategies=strategies,
     )
     print(format_simulation_summary(result))
 

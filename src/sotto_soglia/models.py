@@ -39,3 +39,4 @@ class PlayerState:
     critical_wounds: int = 0
     is_alive: bool = True
     elimination_reason: EliminationReason = EliminationReason.NONE
+    strategy_name: str = "random"

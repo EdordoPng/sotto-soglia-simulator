@@ -9,6 +9,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.cli import format_simulation_summary
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
+from sotto_soglia.strategies import create_strategy
 
 
 def test_simulation_runner_returns_ten_results_for_two_players():
@@ -75,3 +76,40 @@ def test_format_simulation_summary_contains_core_sections():
     assert "Games: 3" in summary
     assert "Win rate by player:" in summary
     assert "Win rate by color:" in summary
+    assert "Win rate by strategy:" in summary
+
+
+def test_simulation_runner_accepts_single_strategy_for_all_players():
+    result = SimulationRunner().run(
+        players_count=4,
+        games_count=5,
+        seed=42,
+        strategies=create_strategy("prudent"),
+    )
+
+    assert len(result.game_results) == 5
+    assert {
+        player.strategy_name
+        for player in result.game_results[0].final_players
+    } == {"prudent"}
+
+
+def test_simulation_runner_accepts_one_strategy_per_player():
+    result = SimulationRunner().run(
+        players_count=4,
+        games_count=5,
+        seed=42,
+        strategies=[
+            create_strategy("random"),
+            create_strategy("prudent"),
+            create_strategy("defensive"),
+            create_strategy("aggressive"),
+        ],
+    )
+
+    strategy_names = [
+        player.strategy_name
+        for player in result.game_results[0].final_players
+    ]
+
+    assert strategy_names == ["random", "prudent", "defensive", "aggressive"]

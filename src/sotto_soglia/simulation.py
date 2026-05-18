@@ -1,10 +1,12 @@
 """Simulation runner for repeated Sotto Soglia games."""
 
 from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
 
 from sotto_soglia.config import GameConfig
 from sotto_soglia.game import GameResult, play_game
 from sotto_soglia.statistics import StatisticAggregator
+from sotto_soglia.strategies import BaseStrategy
 
 
 @dataclass
@@ -27,6 +29,9 @@ class SimulationRunner:
         games_count: int,
         seed: int = 0,
         config: GameConfig | None = None,
+        strategies: (
+            BaseStrategy | Sequence[BaseStrategy] | Mapping[int, BaseStrategy] | None
+        ) = None,
     ) -> SimulationResult:
         """Run many games using incrementing deterministic seeds."""
 
@@ -44,6 +49,7 @@ class SimulationRunner:
                 players_count=players_count,
                 seed=seed + game_index,
                 config=config,
+                strategies=strategies,
             )
             for game_index in range(games_count)
         ]

@@ -72,7 +72,9 @@ def write_games_summary_csv(
         "rounds_count",
         "winner_ids",
         "is_draw",
+        "strategy_names",
         "winner_colors",
+        "winner_strategies",
         "final_alive_players",
         "eliminated_by_lives",
         "eliminated_by_critical_wounds",
@@ -99,7 +101,15 @@ def write_games_summary_csv(
                     "rounds_count": game_result.rounds_count,
                     "winner_ids": join_ids(game_result.winner_ids),
                     "is_draw": game_result.is_draw,
+                    "strategy_names": "|".join(
+                        player.strategy_name
+                        for player in game_result.final_players
+                    ),
                     "winner_colors": "|".join(player.color.name for player in winners),
+                    "winner_strategies": "|".join(
+                        player.strategy_name
+                        for player in winners
+                    ),
                     "final_alive_players": join_ids(
                         player.player_id
                         for player in game_result.final_players

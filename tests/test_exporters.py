@@ -62,7 +62,15 @@ def test_games_summary_csv_is_valid(tmp_path):
         rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
 
     assert len(rows) == 5
-    for column in ["game_id", "seed", "rounds_count", "winner_ids", "is_draw"]:
+    for column in [
+        "game_id",
+        "seed",
+        "rounds_count",
+        "winner_ids",
+        "is_draw",
+        "strategy_names",
+        "winner_strategies",
+    ]:
         assert column in rows[0]
 
 

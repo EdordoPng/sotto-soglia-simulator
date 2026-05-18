@@ -147,6 +147,8 @@ def play_game(
     config = config or GameConfig()
     players = create_players(players_count, config)
     strategy_by_player = _normalize_strategies(strategies, players)
+    for player in players:
+        player.strategy_name = strategy_by_player[player.player_id].name
     rng = Random(seed)
     round_history: list[RoundResult] = []
     elimination_order: list[int] = []

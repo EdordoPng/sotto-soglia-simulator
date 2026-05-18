@@ -20,6 +20,7 @@ class StatisticAggregator:
         draw_count = sum(1 for result in game_results if result.is_draw)
         wins_by_player_id: dict[int, int] = {}
         wins_by_color = {color.name: 0 for color in Color}
+        wins_by_strategy: dict[str, int] = {}
         winner_lives: list[int] = []
         winner_critical_wounds: list[int] = []
 
@@ -31,6 +32,8 @@ class StatisticAggregator:
                 player.player_id: player
                 for player in result.final_players
             }
+            for player in result.final_players:
+                wins_by_strategy.setdefault(player.strategy_name, 0)
             for player in result.final_players:
                 if not result.is_draw and player.player_id in result.winner_ids:
                     continue
@@ -47,6 +50,7 @@ class StatisticAggregator:
                 winner = player_by_id[winner_id]
                 wins_by_player_id[winner_id] = wins_by_player_id.get(winner_id, 0) + 1
                 wins_by_color[winner.color.name] += 1
+                wins_by_strategy[winner.strategy_name] += 1
                 winner_lives.append(winner.lives)
                 winner_critical_wounds.append(winner.critical_wounds)
 
@@ -59,6 +63,7 @@ class StatisticAggregator:
             "draw_rate": draw_count / games_count,
             "wins_by_player_id": wins_by_player_id,
             "wins_by_color": wins_by_color,
+            "wins_by_strategy": wins_by_strategy,
             "win_rate_by_player_id": {
                 player_id: wins / games_count
                 for player_id, wins in wins_by_player_id.items()
@@ -66,6 +71,10 @@ class StatisticAggregator:
             "win_rate_by_color": {
                 color: wins / games_count
                 for color, wins in wins_by_color.items()
+            },
+            "win_rate_by_strategy": {
+                strategy: wins / games_count
+                for strategy, wins in wins_by_strategy.items()
             },
             "eliminations_by_lives": eliminations_by_lives,
             "eliminations_by_critical_wounds": eliminations_by_critical_wounds,
@@ -85,8 +94,10 @@ class StatisticAggregator:
             "draw_rate": 0.0,
             "wins_by_player_id": {},
             "wins_by_color": {color.name: 0 for color in Color},
+            "wins_by_strategy": {},
             "win_rate_by_player_id": {},
             "win_rate_by_color": {color.name: 0.0 for color in Color},
+            "win_rate_by_strategy": {},
             "eliminations_by_lives": 0,
             "eliminations_by_critical_wounds": 0,
             "average_winner_lives": 0.0,
