@@ -51,6 +51,39 @@ def export_simulation_result(
     return paths
 
 
+def export_strategy_tournament_result(
+    tournament_result,
+    output_dir: str | Path,
+) -> dict[str, Path]:
+    """Write compact tournament export files and return their paths."""
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    paths = {
+        "strategy_tournament_stats": output_path / "strategy_tournament_stats.json",
+        "strategy_tournament_lineups": output_path / "strategy_tournament_lineups.csv",
+    }
+
+    stats_data = {
+        "players_count": tournament_result.players_count,
+        "strategies": tournament_result.strategy_names,
+        "games_per_lineup": tournament_result.games_per_lineup,
+        "lineups_tested": tournament_result.lineups_tested,
+        "total_games": tournament_result.total_games,
+        "base_seed": tournament_result.base_seed,
+        "aggregate_stats": tournament_result.aggregate_stats,
+    }
+
+    write_json(paths["strategy_tournament_stats"], stats_data)
+    write_strategy_tournament_lineups_csv(
+        paths["strategy_tournament_lineups"],
+        tournament_result,
+    )
+
+    return paths
+
+
 def write_json(path: str | Path, data: Any) -> None:
     """Write JSON data with stable formatting."""
 
@@ -136,6 +169,45 @@ def write_games_summary_csv(
             )
 
 
+def write_strategy_tournament_lineups_csv(
+    path: str | Path,
+    tournament_result,
+) -> None:
+    """Write one CSV row per tournament lineup."""
+
+    fieldnames = [
+        "lineup_id",
+        "lineup_seed",
+        "strategies_by_player",
+        "games_count",
+        "average_rounds",
+        "draw_count",
+        "wins_by_strategy",
+    ]
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for lineup_result in tournament_result.lineup_results:
+            stats = lineup_result.aggregate_stats
+            writer.writerow(
+                {
+                    "lineup_id": lineup_result.lineup_id,
+                    "lineup_seed": lineup_result.lineup_seed,
+                    "strategies_by_player": serialize_strategy_player_map(
+                        lineup_result.strategies_by_player
+                    ),
+                    "games_count": lineup_result.simulation_result.games_count,
+                    "average_rounds": f"{stats['average_rounds']:.2f}",
+                    "draw_count": stats["draw_count"],
+                    "wins_by_strategy": serialize_name_count_map(
+                        stats["wins_by_strategy"]
+                    ),
+                }
+            )
+
+
 def write_rounds_summary_csv(
     path: str | Path,
     simulation_result: SimulationResult,
@@ -213,6 +285,24 @@ def serialize_player_damage_map(damage_by_player: dict[int, int]) -> str:
     return "|".join(
         f"{player_id}:{damage}"
         for player_id, damage in sorted(damage_by_player.items())
+    )
+
+
+def serialize_strategy_player_map(strategies_by_player: dict[int, str]) -> str:
+    """Serialize strategy assignments as 'P1:name' entries."""
+
+    return "|".join(
+        f"P{player_id}:{strategy_name}"
+        for player_id, strategy_name in sorted(strategies_by_player.items())
+    )
+
+
+def serialize_name_count_map(values: dict[str, int]) -> str:
+    """Serialize name/count mappings as 'name:count' entries."""
+
+    return "|".join(
+        f"{name}:{count}"
+        for name, count in sorted(values.items())
     )
 
 

@@ -2,10 +2,14 @@
 
 import argparse
 
-from sotto_soglia.exporters import export_simulation_result
+from sotto_soglia.exporters import (
+    export_simulation_result,
+    export_strategy_tournament_result,
+)
 from sotto_soglia.models import Color
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
 from sotto_soglia.strategies import AVAILABLE_STRATEGIES, create_strategy
+from sotto_soglia.tournament import StrategyTournamentResult, StrategyTournamentRunner
 
 
 def format_simulation_summary(result: SimulationResult) -> str:
@@ -57,6 +61,49 @@ def format_simulation_summary(result: SimulationResult) -> str:
     return "\n".join(lines)
 
 
+def format_tournament_summary(result: StrategyTournamentResult) -> str:
+    """Format counterbalanced strategy tournament stats for terminal output."""
+
+    stats = result.aggregate_stats
+    strategy_names = ", ".join(result.strategy_names)
+    lines = [
+        "Sotto Soglia Strategy Tournament",
+        f"Players: {result.players_count}",
+        f"Strategies: {strategy_names}",
+        f"Lineups tested: {result.lineups_tested}",
+        f"Games per lineup: {result.games_per_lineup}",
+        f"Total games: {result.total_games}",
+        f"Base seed: {result.base_seed}",
+        "",
+        "Results:",
+        f"- Average rounds: {stats['average_rounds']:.2f}",
+        f"- Draws: {stats['draw_count']} ({stats['draw_rate'] * 100:.2f}%)",
+        f"- Eliminations by lives: {stats['eliminations_by_lives']}",
+        (
+            "- Eliminations by critical wounds: "
+            f"{stats['eliminations_by_critical_wounds']}"
+        ),
+        "",
+        "Win rate by strategy:",
+    ]
+
+    for strategy_name in sorted(stats["wins_by_strategy"]):
+        wins = stats["wins_by_strategy"].get(strategy_name, 0)
+        rate = stats["win_rate_by_strategy"].get(strategy_name, 0.0)
+        lines.append(f"- {strategy_name}: {wins} wins ({rate * 100:.2f}%)")
+
+    lines.extend(["", "Appearances by strategy/player:"])
+    appearances = stats["appearances_by_strategy_player_id"]
+    for strategy_name in sorted(appearances):
+        player_counts = ", ".join(
+            f"P{player_id}={count}"
+            for player_id, count in sorted(appearances[strategy_name].items())
+        )
+        lines.append(f"- {strategy_name}: {player_counts}")
+
+    return "\n".join(lines)
+
+
 def build_strategies_from_args(args: argparse.Namespace):
     """Create strategy instances from parsed CLI arguments."""
 
@@ -90,6 +137,12 @@ def main() -> None:
         help="One strategy per player, in player id order.",
     )
     parser.add_argument(
+        "--tournament-strategies",
+        nargs="+",
+        choices=sorted(AVAILABLE_STRATEGIES),
+        help="Counterbalanced tournament strategies, one per player.",
+    )
+    parser.add_argument(
         "--export",
         action="store_true",
         help="Export simulation results to CSV and JSON files.",
@@ -101,6 +154,31 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    if args.tournament_strategies:
+        if args.strategy or args.strategies:
+            parser.error(
+                "Use --tournament-strategies without --strategy or --strategies"
+            )
+        try:
+            result = StrategyTournamentRunner().run(
+                players_count=args.players,
+                strategy_names=args.tournament_strategies,
+                games_per_lineup=args.games,
+                seed=args.seed,
+            )
+        except ValueError as error:
+            parser.error(str(error))
+
+        print(format_tournament_summary(result))
+
+        if args.export:
+            exported_files = export_strategy_tournament_result(result, args.output_dir)
+            print("")
+            print("Exported files:")
+            for path in exported_files.values():
+                print(f"- {path}")
+        return
+
     try:
         strategies = build_strategies_from_args(args)
     except ValueError as error:
