@@ -12,6 +12,9 @@ from sotto_soglia.models import EliminationReason, PlayerState
 from sotto_soglia.simulation import SimulationResult
 
 
+CSV_DELIMITER = ";"
+
+
 def export_simulation_result(
     simulation_result: SimulationResult,
     output_dir: str | Path,
@@ -78,7 +81,7 @@ def write_games_summary_csv(
     ]
 
     with Path(path).open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
         writer.writeheader()
 
         for game_result in simulation_result.game_results:
@@ -141,7 +144,7 @@ def write_rounds_summary_csv(
     ]
 
     with Path(path).open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
         writer.writeheader()
 
         for game_result in simulation_result.game_results:

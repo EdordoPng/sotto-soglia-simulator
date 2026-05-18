@@ -9,7 +9,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.exporters import export_simulation_result
+from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
 from sotto_soglia.simulation import SimulationRunner
 
 
@@ -59,7 +59,7 @@ def test_games_summary_csv_is_valid(tmp_path):
     exported_files = export_simulation_result(simulation, tmp_path)
 
     with exported_files["games_summary"].open(encoding="utf-8", newline="") as file:
-        rows = list(csv.DictReader(file))
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
 
     assert len(rows) == 5
     for column in ["game_id", "seed", "rounds_count", "winner_ids", "is_draw"]:
@@ -71,7 +71,7 @@ def test_rounds_summary_csv_is_valid(tmp_path):
     exported_files = export_simulation_result(simulation, tmp_path)
 
     with exported_files["rounds_summary"].open(encoding="utf-8", newline="") as file:
-        rows = list(csv.DictReader(file))
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
 
     assert rows
     for column in [
