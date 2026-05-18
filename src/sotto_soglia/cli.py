@@ -2,6 +2,7 @@
 
 import argparse
 
+from sotto_soglia.exporters import export_simulation_result
 from sotto_soglia.models import Color
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
 
@@ -56,6 +57,16 @@ def main() -> None:
     parser.add_argument("--players", type=int, default=4, help="Number of players.")
     parser.add_argument("--games", type=int, default=1, help="Number of games to simulate.")
     parser.add_argument("--seed", type=int, default=0, help="Base random seed.")
+    parser.add_argument(
+        "--export",
+        action="store_true",
+        help="Export simulation results to CSV and JSON files.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="results",
+        help="Output directory for exported files.",
+    )
 
     args = parser.parse_args()
 
@@ -65,3 +76,10 @@ def main() -> None:
         seed=args.seed,
     )
     print(format_simulation_summary(result))
+
+    if args.export:
+        exported_files = export_simulation_result(result, args.output_dir)
+        print("")
+        print("Exported files:")
+        for path in exported_files.values():
+            print(f"- {path}")
