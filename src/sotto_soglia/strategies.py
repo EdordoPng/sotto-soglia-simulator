@@ -24,15 +24,24 @@ def _alive_opponent_colors(
 ) -> set[Color]:
     """Return colors of currently alive opponents from the minimal game state."""
 
+    return {opponent.color for opponent in _alive_opponents(player, game_state)}
+
+
+def _alive_opponents(
+    player: PlayerState,
+    game_state: dict[str, Any] | None,
+) -> list[PlayerState]:
+    """Return currently alive opponents from the minimal game state."""
+
     if not game_state:
-        return set()
+        return []
 
     players = game_state.get("players", [])
-    return {
-        other.color
+    return [
+        other
         for other in players
         if other.player_id != player.player_id and other.is_alive
-    }
+    ]
 
 
 class BaseStrategy:
@@ -193,6 +202,82 @@ class MixedStrategy(BaseStrategy):
         return max(hand, key=score)
 
 
+class AdaptivePressureStrategy(BaseStrategy):
+    """Strategy that balances pressure, critical-wound risk and survival."""
+
+    name = "adaptive_pressure"
+
+    def choose_card(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+        rng: Random,
+    ) -> Card:
+        """Choose the highest scoring card with deterministic tie-breakers."""
+
+        opponents_by_color = {
+            opponent.color: opponent
+            for opponent in _alive_opponents(player, game_state)
+        }
+
+        def opponent_vulnerability(card: Card) -> float:
+            opponent = opponents_by_color.get(card.color)
+            if opponent is None:
+                return 0.0
+
+            points = opponent.critical_wounds * 1.5
+            if opponent.lives <= 3:
+                points += 3
+            elif opponent.lives <= 6:
+                points += 2
+            elif opponent.lives <= 9:
+                points += 1
+            return points
+
+        def score(card: Card) -> tuple[float, bool, float, int, int]:
+            points = -card.value * 1.2
+
+            if player.critical_wounds >= 2:
+                if card.value == 1:
+                    points -= 8
+                elif card.value == 2:
+                    points -= 6
+                else:
+                    points += card.value * 1.5
+                    if card.value >= 4:
+                        points += 3
+            else:
+                points -= max(0, 3 - card.value) * 0.8
+                if player.lives <= 3:
+                    points += (6 - card.value) * 1.4
+                elif player.lives <= 6:
+                    points += (5 - card.value) * 0.4
+
+            if card.color == player.color:
+                points += 2
+                if player.lives <= 3:
+                    points += 3
+                elif player.lives <= 6:
+                    points += 2
+
+            vulnerability = opponent_vulnerability(card)
+            if vulnerability:
+                points += 2 + vulnerability
+
+            too_risky = player.critical_wounds >= 2 and card.value <= 2
+            value_preference = card.value if too_risky else -card.value
+            return (
+                points,
+                card.color == player.color,
+                vulnerability,
+                value_preference,
+                -_color_order(card.color),
+            )
+
+        return max(hand, key=score)
+
+
 AVAILABLE_STRATEGIES = {
     RandomStrategy.name: RandomStrategy,
     PrudentStrategy.name: PrudentStrategy,
@@ -200,6 +285,7 @@ AVAILABLE_STRATEGIES = {
     AggressiveStrategy.name: AggressiveStrategy,
     AntiCriticalStrategy.name: AntiCriticalStrategy,
     MixedStrategy.name: MixedStrategy,
+    AdaptivePressureStrategy.name: AdaptivePressureStrategy,
 }
 
 
