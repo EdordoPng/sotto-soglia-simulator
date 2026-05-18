@@ -12,6 +12,8 @@ from sotto_soglia.critical import (
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
+    SONO_ANCORA_QUI_SINGLE_2,
+    SONO_ANCORA_QUI_UP_TO_2_TARGETS,
     CriticalCardEvent,
     critical_card_name,
     critical_card_timing,
@@ -131,6 +133,9 @@ def resolve_round(
                 config=config,
                 critical_events=critical_events,
                 critical_life_delta_by_player=critical_life_delta_by_player,
+                strategies=strategies or {},
+                rng=rng,
+                game_state=game_state,
             )
 
     base_damage_by_player = {
@@ -229,6 +234,9 @@ def _draw_and_apply_critical_card(
     config: GameConfig,
     critical_events: list[CriticalCardEvent],
     critical_life_delta_by_player: dict[int, int],
+    strategies: Mapping[int, BaseStrategy],
+    rng: Random,
+    game_state: dict | None,
 ) -> None:
     """Draw one critical card, if available, and apply or register its effect."""
 
@@ -249,23 +257,38 @@ def _draw_and_apply_critical_card(
 
     if card_id == BENDAGGIO_EMERGENZA:
         before = player.lives
-        player.lives = min(config.initial_lives, player.lives + 2)
+        player.lives = min(config.initial_lives, player.lives + 1)
         life_delta_player = player.lives - before
         player.life_gained_from_critical_cards += life_delta_player
         critical_life_delta_by_player[player_id] += life_delta_player
     elif card_id == SONO_ANCORA_QUI:
-        for target in player_map.values():
-            if target.player_id == player_id or not target.is_alive:
-                continue
-            if target.player_id in critical_wound_player_ids:
-                continue
+        valid_targets = [
+            target
+            for target in player_map.values()
+            if target.player_id != player_id
+            and target.is_alive
+            and target.player_id not in critical_wound_player_ids
+        ]
+        selected_targets = _choose_sono_ancora_qui_targets(
+            source=player,
+            valid_targets=valid_targets,
+            strategy=strategies.get(player_id),
+            rng=rng,
+            game_state=game_state,
+            variant=config.sono_ancora_qui_variant,
+        )
+        target_damage = 2 if config.sono_ancora_qui_variant == SONO_ANCORA_QUI_SINGLE_2 else 1
+        target_ids: list[int] = []
+        for target in selected_targets:
             before = target.lives
-            apply_life_loss(target, 1)
+            apply_life_loss(target, target_damage)
             delta = target.lives - before
             if delta:
                 target.life_lost_from_critical_cards += -delta
                 critical_life_delta_by_player[target.player_id] += delta
                 life_delta_targets[target.player_id] = delta
+            target_ids.append(target.player_id)
+        target_player_id = ",".join(str(target_id) for target_id in target_ids) or None
     else:
         player.active_critical_effects.append(card_id)
 
@@ -278,7 +301,8 @@ def _draw_and_apply_critical_card(
             critical_card_id=card_id,
             critical_card_name=critical_card_name(card_id),
             timing=critical_card_timing(card_id),
-            effect_triggered=effect_triggered,
+            effect_triggered=effect_triggered if card_id != SONO_ANCORA_QUI else target_player_id is not None,
+            target_player_id=target_player_id if card_id == SONO_ANCORA_QUI else None,
             life_delta_player=life_delta_player,
             life_delta_targets=life_delta_targets,
             deck_position=deck_position,
@@ -286,6 +310,43 @@ def _draw_and_apply_critical_card(
             player_critical_wounds_after=player.critical_wounds,
         )
     )
+
+
+def _choose_sono_ancora_qui_targets(
+    source: PlayerState,
+    valid_targets: list[PlayerState],
+    strategy: BaseStrategy | None,
+    rng: Random,
+    game_state: dict | None,
+    variant: str,
+) -> list[PlayerState]:
+    """Choose one or two Sono ancora qui targets using strategy target choice."""
+
+    target_count = 2 if variant == SONO_ANCORA_QUI_UP_TO_2_TARGETS else 1
+    remaining_targets = list(valid_targets)
+    selected_targets: list[PlayerState] = []
+
+    for _ in range(target_count):
+        if not remaining_targets:
+            break
+        if strategy is None:
+            target = choose_fallback_critical_effect_target(remaining_targets)
+        else:
+            target = strategy.choose_critical_effect_target(
+                game_state,
+                source,
+                SONO_ANCORA_QUI,
+                remaining_targets,
+                rng,
+            )
+            if target not in remaining_targets:
+                target = choose_fallback_critical_effect_target(remaining_targets)
+        if target is None:
+            break
+        selected_targets.append(target)
+        remaining_targets.remove(target)
+
+    return selected_targets
 
 
 def _calculate_base_damage_with_critical_effects(

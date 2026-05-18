@@ -23,6 +23,8 @@ from sotto_soglia.critical import (
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
+    SONO_ANCORA_QUI_SINGLE_2,
+    SONO_ANCORA_QUI_UP_TO_2_TARGETS,
     build_critical_deck,
     shuffle_critical_deck,
     validate_critical_deck_order,
@@ -35,17 +37,19 @@ from sotto_soglia.simulation import SimulationRunner
 from sotto_soglia.strategies import (
     AggressiveStrategy,
     BaseStrategy,
+    AdaptivePressureStrategy,
     create_strategy,
     choose_fallback_critical_effect_target,
 )
 
 
-def _critical_config(deck_order=None):
+def _critical_config(deck_order=None, sono_variant="single_1"):
     return GameConfig(
         initial_lives=18,
         critical_wounds_limit=5,
         critical_card_effects_enabled=True,
         critical_deck_order=tuple(deck_order) if deck_order else None,
+        sono_ancora_qui_variant=sono_variant,
     )
 
 
@@ -116,7 +120,7 @@ def test_critical_draw_uses_top_card_and_empty_deck_has_no_effect():
 
     assert players[0].critical_wounds == 1
     assert players[0].critical_cards_drawn == [BENDAGGIO_EMERGENZA]
-    assert players[0].lives == 12
+    assert players[0].lives == 11
     assert deck == []
 
     resolve_round(
@@ -193,6 +197,262 @@ def test_sono_ancora_qui_damages_only_valid_nonimmune_opponents():
     assert players[0].lives == 18
     assert players[1].lives == 18
     assert players[2].lives == 14
+
+
+def test_bendaggio_recovers_one_life_not_two():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=10),
+        PlayerState(player_id=2, color=Color.RED, lives=18),
+    ]
+
+    resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _critical_config(),
+        critical_deck=[BENDAGGIO_EMERGENZA],
+    )
+
+    assert players[0].lives == 11
+    assert players[0].life_gained_from_critical_cards == 1
+
+
+def test_sono_ancora_qui_hits_only_one_valid_target_and_logs_target():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=10),
+        PlayerState(player_id=3, color=Color.GREEN, lives=6),
+        PlayerState(player_id=4, color=Color.YELLOW, lives=6, critical_wounds=2),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+            3: Card(Color.GREEN, 4),
+            4: Card(Color.YELLOW, 4),
+        },
+        _critical_config(),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_events = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ]
+    assert len(sono_events) == 1
+    assert sono_events[0].target_player_id == "4"
+    assert sono_events[0].life_delta_targets == {4: -1}
+    assert len(sono_events[0].life_delta_targets) == 1
+
+
+def test_sono_ancora_qui_single_2_hits_one_target_for_two_life_without_below_zero():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=1),
+        PlayerState(player_id=3, color=Color.GREEN, lives=8),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+            3: Card(Color.GREEN, 4),
+        },
+        _critical_config(sono_variant=SONO_ANCORA_QUI_SINGLE_2),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.target_player_id == "2"
+    assert sono_event.life_delta_targets == {2: -1}
+    assert players[1].lives == 0
+    assert players[2].lives == 5
+
+
+def test_sono_ancora_qui_up_to_2_targets_hits_two_valid_targets():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=4),
+        PlayerState(player_id=3, color=Color.GREEN, lives=5),
+        PlayerState(player_id=4, color=Color.YELLOW, lives=9),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+            3: Card(Color.GREEN, 4),
+            4: Card(Color.YELLOW, 4),
+        },
+        _critical_config(sono_variant=SONO_ANCORA_QUI_UP_TO_2_TARGETS),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.target_player_id == "2,3"
+    assert sono_event.life_delta_targets == {2: -1, 3: -1}
+    assert players[1].lives == 0
+    assert players[2].lives == 1
+    assert players[3].lives == 6
+
+
+def test_sono_ancora_qui_up_to_2_targets_hits_one_when_only_one_is_valid():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=18),
+        PlayerState(player_id=3, color=Color.GREEN, lives=5, is_alive=False),
+        PlayerState(player_id=4, color=Color.YELLOW, lives=7),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 1),
+            4: Card(Color.YELLOW, 4),
+        },
+        _critical_config(sono_variant=SONO_ANCORA_QUI_UP_TO_2_TARGETS),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.target_player_id == "4"
+    assert sono_event.life_delta_targets == {4: -1}
+
+
+def test_sono_ancora_qui_does_not_hit_eliminated_immune_or_self():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=18),
+        PlayerState(player_id=3, color=Color.GREEN, lives=5, is_alive=False),
+        PlayerState(player_id=4, color=Color.YELLOW, lives=7),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 1),
+            4: Card(Color.YELLOW, 4),
+        },
+        _critical_config(),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.target_player_id == "4"
+    assert sono_event.life_delta_targets == {4: -1}
+    assert players[0].lives == 18
+    assert players[1].lives == 18
+    assert players[2].lives == 5
+
+
+def test_sono_ancora_qui_has_no_effect_without_valid_targets():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=18),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 1),
+        },
+        _critical_config(),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.effect_triggered is False
+    assert sono_event.target_player_id is None
+    assert sono_event.life_delta_targets == {}
+    assert players[0].lives == 18
+    assert players[1].lives == 18
+
+
+def test_sono_ancora_qui_up_to_2_targets_has_no_effect_without_valid_targets():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=18),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 1),
+        },
+        _critical_config(sono_variant=SONO_ANCORA_QUI_UP_TO_2_TARGETS),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.effect_triggered is False
+    assert sono_event.target_player_id is None
+    assert sono_event.life_delta_targets == {}
+
+
+def test_sono_ancora_qui_uses_strategy_target_choice():
+    class PickHighestIdStrategy(BaseStrategy):
+        name = "pick_highest_id"
+
+        def choose_card(self, player, hand, game_state, rng):
+            return hand[0]
+
+        def choose_critical_effect_target(
+            self,
+            game_state,
+            source_player,
+            effect_id,
+            valid_targets,
+            rng,
+        ):
+            return max(valid_targets, key=lambda target: target.player_id)
+
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=3),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+            3: Card(Color.GREEN, 4),
+        },
+        _critical_config(),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: PickHighestIdStrategy()},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.target_player_id == "3"
 
 
 def test_mano_lucida_and_mano_tremante_set_next_round_hand_size():
@@ -363,6 +623,38 @@ def test_choose_critical_effect_target_returns_valid_target_and_fallback_works()
     assert choose_fallback_critical_effect_target(valid_targets) == target_a
 
 
+def test_adaptive_pressure_targets_lowest_lives_for_sono_ancora_qui():
+    source = PlayerState(player_id=1, color=Color.BLUE, lives=18)
+    target_a = PlayerState(player_id=2, color=Color.RED, lives=6, critical_wounds=0)
+    target_b = PlayerState(player_id=3, color=Color.GREEN, lives=4, critical_wounds=0)
+
+    selected = AdaptivePressureStrategy().choose_critical_effect_target(
+        {"players": [source, target_a, target_b]},
+        source,
+        SONO_ANCORA_QUI,
+        [target_a, target_b],
+        Random(1),
+    )
+
+    assert selected == target_b
+
+
+def test_adaptive_pressure_breaks_sono_ancora_qui_life_ties_by_critical_wounds():
+    source = PlayerState(player_id=1, color=Color.BLUE, lives=18)
+    target_a = PlayerState(player_id=2, color=Color.RED, lives=4, critical_wounds=0)
+    target_b = PlayerState(player_id=3, color=Color.GREEN, lives=4, critical_wounds=2)
+
+    selected = AdaptivePressureStrategy().choose_critical_effect_target(
+        {"players": [source, target_a, target_b]},
+        source,
+        SONO_ANCORA_QUI,
+        [target_a, target_b],
+        Random(1),
+    )
+
+    assert selected == target_b
+
+
 def test_strategy_without_target_override_uses_base_fallback():
     class PlainStrategy(BaseStrategy):
         name = "plain"
@@ -454,6 +746,236 @@ def test_cli_accepts_critical_adaptive_and_critical_flags(tmp_path):
 
     assert "- critical_adaptive:" in result.stdout
     assert (tmp_path / "critical_events.csv").exists()
+
+
+def test_cli_defaults_sono_ancora_qui_variant_to_single_1(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "2",
+            "--seed",
+            "42",
+            "--strategy",
+            "critical_adaptive",
+            "--critical-card-effects",
+            "on",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["sono_ancora_qui_variant"] == "single_1"
+
+
+def test_cli_exports_sono_ancora_qui_variant_and_critical_damage(tmp_path):
+    order = ",".join(
+        [
+            SONO_ANCORA_QUI,
+            SONO_ANCORA_QUI,
+            BENDAGGIO_EMERGENZA,
+            BENDAGGIO_EMERGENZA,
+            SANGUE_FREDDO,
+            SANGUE_FREDDO,
+            MANO_LUCIDA,
+            MANO_LUCIDA,
+            SCUDO_ISTINTIVO,
+            SCUDO_ISTINTIVO,
+            MANO_TREMANTE,
+            MANO_TREMANTE,
+            COLPO_DI_CODA,
+            COLPO_DI_CODA,
+            FERITA_ESPOSTA,
+            FERITA_ESPOSTA,
+        ]
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "3",
+            "--seed",
+            "42",
+            "--strategy",
+            "critical_adaptive",
+            "--critical-card-effects",
+            "on",
+            "--critical-deck-order",
+            order,
+            "--sono-ancora-qui-variant",
+            "up_to_2_targets",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+    with (tmp_path / "critical_events.csv").open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+    with (tmp_path / "aggregate_stats.json").open(encoding="utf-8") as file:
+        stats = json.load(file)
+
+    sono_rows = [
+        row for row in rows if row["critical_card_id"] == SONO_ANCORA_QUI
+    ]
+    assert config["sono_ancora_qui_variant"] == "up_to_2_targets"
+    assert sono_rows
+    assert any("," in row["target_player_id"] for row in sono_rows)
+    assert stats["critical_card_stats"][SONO_ANCORA_QUI]["total_life_delta"] < 0
+
+
+def test_cli_without_final_config_flags_keeps_default_config(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "2",
+            "--games",
+            "1",
+            "--seed",
+            "42",
+            "--strategy",
+            "adaptive_pressure",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["initial_lives"] == GameConfig().initial_lives
+    assert config["critical_wounds_limit"] == GameConfig().critical_wounds_limit
+
+
+def test_cli_final_config_flags_for_two_players_are_exported(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "2",
+            "--games",
+            "3",
+            "--seed",
+            "42",
+            "--strategy",
+            "critical_adaptive",
+            "--initial-lives",
+            "12",
+            "--critical-wounds-max",
+            "5",
+            "--critical-card-effects",
+            "on",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["players_count"] == 2
+    assert config["initial_lives"] == 12
+    assert config["critical_wounds_limit"] == 5
+    assert (tmp_path / "critical_events.csv").exists()
+    assert (tmp_path / "critical_deck_orders.csv").exists()
+    assert (tmp_path / "critical_card_stats.csv").exists()
+
+
+def test_cli_final_config_flags_for_three_players_are_exported(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "3",
+            "--games",
+            "3",
+            "--seed",
+            "42",
+            "--strategy",
+            "adaptive_pressure",
+            "--initial-lives",
+            "17",
+            "--critical-wounds-max",
+            "4",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["players_count"] == 3
+    assert config["initial_lives"] == 17
+    assert config["critical_wounds_limit"] == 4
+
+
+def test_cli_final_config_flags_for_four_players_are_exported(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "3",
+            "--seed",
+            "42",
+            "--strategy",
+            "adaptive_pressure",
+            "--initial-lives",
+            "24",
+            "--critical-wounds-max",
+            "4",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["players_count"] == 4
+    assert config["initial_lives"] == 24
+    assert config["critical_wounds_limit"] == 4
 
 
 def test_cli_parametric_uses_critical_card_flags(tmp_path):

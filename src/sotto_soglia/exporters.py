@@ -44,9 +44,13 @@ def export_simulation_result(
         "players_count": simulation_result.players_count,
         "games_count": simulation_result.games_count,
         "base_seed": simulation_result.base_seed,
+        "initial_lives": simulation_result.initial_lives,
+        "critical_wounds_limit": simulation_result.critical_wounds_limit,
+        "color_effects_enabled": simulation_result.color_effects_enabled,
         "critical_card_effects_enabled": simulation_result.critical_card_effects_enabled,
         "critical_deck_seed": simulation_result.critical_deck_seed,
         "critical_deck_order": simulation_result.critical_deck_order,
+        "sono_ancora_qui_variant": simulation_result.sono_ancora_qui_variant,
         "generated_files": {
             name: path.name
             for name, path in paths.items()

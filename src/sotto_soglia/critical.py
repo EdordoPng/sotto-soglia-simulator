@@ -13,6 +13,15 @@ COLPO_DI_CODA = "colpo_di_coda"
 FERITA_ESPOSTA = "ferita_esposta"
 SONO_ANCORA_QUI = "sono_ancora_qui"
 
+SONO_ANCORA_QUI_SINGLE_1 = "single_1"
+SONO_ANCORA_QUI_SINGLE_2 = "single_2"
+SONO_ANCORA_QUI_UP_TO_2_TARGETS = "up_to_2_targets"
+SONO_ANCORA_QUI_VARIANTS = (
+    SONO_ANCORA_QUI_SINGLE_1,
+    SONO_ANCORA_QUI_SINGLE_2,
+    SONO_ANCORA_QUI_UP_TO_2_TARGETS,
+)
+
 IMMEDIATE_EFFECTS = {BENDAGGIO_EMERGENZA, SONO_ANCORA_QUI}
 NEXT_ROUND_EFFECTS = {
     SANGUE_FREDDO,
@@ -49,7 +58,7 @@ class CriticalCardEvent:
     critical_card_name: str
     timing: str
     effect_triggered: bool
-    target_player_id: int | None = None
+    target_player_id: int | str | None = None
     life_delta_player: int = 0
     life_delta_targets: dict[int, int] = field(default_factory=dict)
     prevented_damage: int = 0

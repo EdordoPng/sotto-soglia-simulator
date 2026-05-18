@@ -3,6 +3,7 @@
 from random import Random
 from typing import Any
 
+from sotto_soglia.critical import COLPO_DI_CODA, SONO_ANCORA_QUI
 from sotto_soglia.models import Card, Color, PlayerState
 
 
@@ -385,6 +386,27 @@ class AdaptivePressureStrategy(BaseStrategy):
 
         if not valid_targets:
             return None
+
+        if effect_id == SONO_ANCORA_QUI:
+            return min(
+                valid_targets,
+                key=lambda target: (
+                    target.lives,
+                    -target.critical_wounds,
+                    target.player_id,
+                ),
+            )
+
+        if effect_id == COLPO_DI_CODA:
+            return max(
+                valid_targets,
+                key=lambda target: (
+                    target.critical_wounds * 3.0 + max(0, 10 - target.lives),
+                    -target.lives,
+                    -target.player_id,
+                ),
+            )
+
         return max(
             valid_targets,
             key=lambda target: (

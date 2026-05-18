@@ -3,7 +3,7 @@
 import argparse
 
 from sotto_soglia.config import GameConfig
-from sotto_soglia.critical import validate_critical_deck_order
+from sotto_soglia.critical import SONO_ANCORA_QUI_VARIANTS, validate_critical_deck_order
 from sotto_soglia.exporters import (
     export_parametric_simulation_result,
     export_simulation_result,
@@ -224,14 +224,25 @@ def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
         if args.critical_deck_order
         else None
     )
-    return GameConfig(
-        critical_card_effects_enabled=parse_on_off(
+    config_values = {
+        "critical_card_effects_enabled": parse_on_off(
             args.critical_card_effects,
             "--critical-card-effects",
         ),
-        critical_deck_seed=args.critical_deck_seed,
-        critical_deck_order=critical_deck_order,
-    )
+        "critical_deck_seed": args.critical_deck_seed,
+        "critical_deck_order": critical_deck_order,
+        "sono_ancora_qui_variant": args.sono_ancora_qui_variant,
+    }
+    if args.initial_lives is not None:
+        if args.initial_lives <= 0:
+            raise ValueError("--initial-lives must be greater than 0")
+        config_values["initial_lives"] = args.initial_lives
+    if args.critical_wounds_max is not None:
+        if args.critical_wounds_max <= 0:
+            raise ValueError("--critical-wounds-max must be greater than 0")
+        config_values["critical_wounds_limit"] = args.critical_wounds_max
+
+    return GameConfig(**config_values)
 
 
 def main() -> None:
@@ -299,6 +310,18 @@ def main() -> None:
         help="Output directory for exported or generated files.",
     )
     parser.add_argument(
+        "--initial-lives",
+        type=int,
+        default=None,
+        help="Override initial lives for a standard simulation run.",
+    )
+    parser.add_argument(
+        "--critical-wounds-max",
+        type=int,
+        default=None,
+        help="Override the critical wound elimination threshold.",
+    )
+    parser.add_argument(
         "--critical-card-effects",
         choices=["off", "on"],
         default="off",
@@ -314,6 +337,12 @@ def main() -> None:
         "--critical-deck-order",
         default=None,
         help="Fixed comma-separated 16-card critical wound deck order.",
+    )
+    parser.add_argument(
+        "--sono-ancora-qui-variant",
+        choices=SONO_ANCORA_QUI_VARIANTS,
+        default="single_1",
+        help="Experimental Sono ancora qui variant used when critical-card-effects is on.",
     )
 
     args = parser.parse_args()
@@ -370,6 +399,7 @@ def main() -> None:
                 ),
                 critical_deck_seed=critical_config.critical_deck_seed,
                 critical_deck_order=critical_config.critical_deck_order,
+                sono_ancora_qui_variant=critical_config.sono_ancora_qui_variant,
             )
         except ValueError as error:
             parser.error(str(error))

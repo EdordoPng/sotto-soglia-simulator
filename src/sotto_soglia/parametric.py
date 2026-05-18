@@ -57,6 +57,7 @@ class ParametricSimulationRunner:
         critical_card_effects_enabled: bool = False,
         critical_deck_seed: int | None = None,
         critical_deck_order: tuple[str, ...] | None = None,
+        sono_ancora_qui_variant: str = "single_1",
     ) -> ParametricSimulationResult:
         """Run one simulation batch per configuration."""
 
@@ -80,6 +81,7 @@ class ParametricSimulationRunner:
                 critical_card_effects_enabled,
                 critical_deck_seed,
                 critical_deck_order,
+                sono_ancora_qui_variant,
             )
         ):
             config_seed = seed + config_index * games_per_config
@@ -122,6 +124,7 @@ class ParametricSimulationRunner:
         critical_card_effects_enabled: bool = False,
         critical_deck_seed: int | None = None,
         critical_deck_order: tuple[str, ...] | None = None,
+        sono_ancora_qui_variant: str = "single_1",
     ) -> list[GameConfig]:
         """Build configs in a stable nested-loop order."""
 
@@ -133,6 +136,7 @@ class ParametricSimulationRunner:
                 critical_card_effects_enabled=critical_card_effects_enabled,
                 critical_deck_seed=critical_deck_seed,
                 critical_deck_order=critical_deck_order,
+                sono_ancora_qui_variant=sono_ancora_qui_variant,
             )
             for initial_lives in initial_lives_values
             for critical_wounds_limit in critical_wounds_values
