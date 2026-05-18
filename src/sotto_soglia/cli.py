@@ -254,17 +254,55 @@ def main() -> None:
         help="Color effects values tested in parametric mode.",
     )
     parser.add_argument(
+        "--plot-parametric",
+        metavar="PATH",
+        help="Generate plots from an exported parametric_summary.csv file.",
+    )
+    parser.add_argument(
         "--export",
         action="store_true",
         help="Export simulation results to CSV and JSON files.",
     )
     parser.add_argument(
         "--output-dir",
-        default="results",
-        help="Output directory for exported files.",
+        default=None,
+        help="Output directory for exported or generated files.",
     )
 
     args = parser.parse_args()
+    if args.plot_parametric:
+        if args.parametric:
+            parser.error("Use --plot-parametric without --parametric")
+        if args.tournament_strategies:
+            parser.error("Use --plot-parametric without --tournament-strategies")
+        if args.export:
+            parser.error("Use --plot-parametric without --export")
+        if args.strategy or args.strategies:
+            parser.error("Use --plot-parametric without --strategy or --strategies")
+
+        try:
+            from sotto_soglia.plots import generate_parametric_plots
+        except ModuleNotFoundError as error:
+            if error.name == "matplotlib":
+                parser.error(
+                    "matplotlib is required for --plot-parametric. "
+                    "Install project requirements first."
+                )
+            raise
+
+        try:
+            generated_plots = generate_parametric_plots(
+                args.plot_parametric,
+                args.output_dir or "results/plots",
+            )
+        except (FileNotFoundError, ValueError) as error:
+            parser.error(str(error))
+
+        print("Generated plots:")
+        for path in generated_plots:
+            print(f"- {path}")
+        return
+
     if args.parametric:
         if args.tournament_strategies:
             parser.error("Parametric tournament is not implemented yet.")
@@ -288,7 +326,7 @@ def main() -> None:
         if args.export:
             exported_files = export_parametric_simulation_result(
                 result,
-                args.output_dir,
+                args.output_dir or "results",
             )
             print("")
             print("Exported files:")
@@ -314,7 +352,10 @@ def main() -> None:
         print(format_tournament_summary(result))
 
         if args.export:
-            exported_files = export_strategy_tournament_result(result, args.output_dir)
+            exported_files = export_strategy_tournament_result(
+                result,
+                args.output_dir or "results",
+            )
             print("")
             print("Exported files:")
             for path in exported_files.values():
@@ -335,7 +376,7 @@ def main() -> None:
     print(format_simulation_summary(result))
 
     if args.export:
-        exported_files = export_simulation_result(result, args.output_dir)
+        exported_files = export_simulation_result(result, args.output_dir or "results")
         print("")
         print("Exported files:")
         for path in exported_files.values():
