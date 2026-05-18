@@ -14,3 +14,6 @@ class GameConfig:
     min_players: int = 2
     max_players: int = 4
     card_values: tuple[int, ...] = (1, 2, 3, 4, 5)
+    critical_card_effects_enabled: bool = False
+    critical_deck_seed: int | None = None
+    critical_deck_order: tuple[str, ...] | None = None

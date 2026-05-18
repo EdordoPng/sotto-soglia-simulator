@@ -54,6 +54,9 @@ class ParametricSimulationRunner:
         critical_wounds_values: list[int],
         color_effects_values: list[bool],
         strategy_names: str | Sequence[str] | None = None,
+        critical_card_effects_enabled: bool = False,
+        critical_deck_seed: int | None = None,
+        critical_deck_order: tuple[str, ...] | None = None,
     ) -> ParametricSimulationResult:
         """Run one simulation batch per configuration."""
 
@@ -74,6 +77,9 @@ class ParametricSimulationRunner:
                 initial_lives_values,
                 critical_wounds_values,
                 color_effects_values,
+                critical_card_effects_enabled,
+                critical_deck_seed,
+                critical_deck_order,
             )
         ):
             config_seed = seed + config_index * games_per_config
@@ -113,6 +119,9 @@ class ParametricSimulationRunner:
         initial_lives_values: Sequence[int],
         critical_wounds_values: Sequence[int],
         color_effects_values: Sequence[bool],
+        critical_card_effects_enabled: bool = False,
+        critical_deck_seed: int | None = None,
+        critical_deck_order: tuple[str, ...] | None = None,
     ) -> list[GameConfig]:
         """Build configs in a stable nested-loop order."""
 
@@ -121,6 +130,9 @@ class ParametricSimulationRunner:
                 initial_lives=initial_lives,
                 critical_wounds_limit=critical_wounds_limit,
                 color_effects_enabled=color_effects_enabled,
+                critical_card_effects_enabled=critical_card_effects_enabled,
+                critical_deck_seed=critical_deck_seed,
+                critical_deck_order=critical_deck_order,
             )
             for initial_lives in initial_lives_values
             for critical_wounds_limit in critical_wounds_values

@@ -31,11 +31,22 @@ def export_simulation_result(
         "games_summary": output_path / "games_summary.csv",
         "rounds_summary": output_path / "rounds_summary.csv",
     }
+    if simulation_result.critical_card_effects_enabled:
+        paths.update(
+            {
+                "critical_events": output_path / "critical_events.csv",
+                "critical_deck_orders": output_path / "critical_deck_orders.csv",
+                "critical_card_stats": output_path / "critical_card_stats.csv",
+            }
+        )
 
     config_data = {
         "players_count": simulation_result.players_count,
         "games_count": simulation_result.games_count,
         "base_seed": simulation_result.base_seed,
+        "critical_card_effects_enabled": simulation_result.critical_card_effects_enabled,
+        "critical_deck_seed": simulation_result.critical_deck_seed,
+        "critical_deck_order": simulation_result.critical_deck_order,
         "generated_files": {
             name: path.name
             for name, path in paths.items()
@@ -48,6 +59,10 @@ def export_simulation_result(
     write_json(paths["aggregate_stats"], simulation_result.aggregate_stats)
     write_games_summary_csv(paths["games_summary"], simulation_result)
     write_rounds_summary_csv(paths["rounds_summary"], simulation_result)
+    if simulation_result.critical_card_effects_enabled:
+        write_critical_events_csv(paths["critical_events"], simulation_result)
+        write_critical_deck_orders_csv(paths["critical_deck_orders"], simulation_result)
+        write_critical_card_stats_csv(paths["critical_card_stats"], simulation_result)
 
     return paths
 
@@ -357,6 +372,126 @@ def write_rounds_summary_csv(
                         "alive_players_after_round": join_ids(sorted(alive_player_ids)),
                     }
                 )
+
+
+def write_critical_deck_orders_csv(
+    path: str | Path,
+    simulation_result: SimulationResult,
+) -> None:
+    """Write one initial critical deck order row per game."""
+
+    fieldnames = ["game_id", "critical_deck_order"]
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for game_result in simulation_result.game_results:
+            writer.writerow(
+                {
+                    "game_id": game_result.game_id,
+                    "critical_deck_order": ",".join(game_result.initial_critical_deck_order),
+                }
+            )
+
+
+def write_critical_events_csv(
+    path: str | Path,
+    simulation_result: SimulationResult,
+) -> None:
+    """Write one row per critical card event."""
+
+    fieldnames = [
+        "game_id",
+        "round_number",
+        "draw_order",
+        "player_id",
+        "critical_card_id",
+        "critical_card_name",
+        "timing",
+        "effect_triggered",
+        "target_player_id",
+        "life_delta_player",
+        "life_delta_targets",
+        "prevented_damage",
+        "deck_position",
+        "player_lives_after",
+        "player_critical_wounds_after",
+    ]
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for game_result in simulation_result.game_results:
+            for event in game_result.critical_events:
+                writer.writerow(
+                    {
+                        "game_id": event.game_id,
+                        "round_number": event.round_number,
+                        "draw_order": event.draw_order if event.draw_order is not None else "",
+                        "player_id": event.player_id,
+                        "critical_card_id": event.critical_card_id,
+                        "critical_card_name": event.critical_card_name,
+                        "timing": event.timing,
+                        "effect_triggered": event.effect_triggered,
+                        "target_player_id": (
+                            event.target_player_id
+                            if event.target_player_id is not None
+                            else ""
+                        ),
+                        "life_delta_player": event.life_delta_player,
+                        "life_delta_targets": serialize_player_damage_map(
+                            event.life_delta_targets
+                        ),
+                        "prevented_damage": event.prevented_damage,
+                        "deck_position": (
+                            event.deck_position if event.deck_position is not None else ""
+                        ),
+                        "player_lives_after": event.player_lives_after,
+                        "player_critical_wounds_after": (
+                            event.player_critical_wounds_after
+                        ),
+                    }
+                )
+
+
+def write_critical_card_stats_csv(
+    path: str | Path,
+    simulation_result: SimulationResult,
+) -> None:
+    """Write aggregate critical-card stats by card id."""
+
+    fieldnames = [
+        "card_id",
+        "draw_count",
+        "activation_count",
+        "total_life_delta",
+        "average_life_delta",
+        "win_count_after_draw",
+        "elimination_count_after_draw",
+    ]
+    card_stats = simulation_result.aggregate_stats.get("critical_card_stats", {})
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for card_id, values in sorted(card_stats.items()):
+            writer.writerow(
+                {
+                    "card_id": card_id,
+                    "draw_count": values.get("draw_count", 0),
+                    "activation_count": values.get("activation_count", 0),
+                    "total_life_delta": values.get("total_life_delta", 0),
+                    "average_life_delta": f"{values.get('average_life_delta', 0.0):.6f}",
+                    "win_count_after_draw": values.get("win_count_after_draw", 0),
+                    "elimination_count_after_draw": values.get(
+                        "elimination_count_after_draw",
+                        0,
+                    ),
+                }
+            )
 
 
 def to_jsonable(value: Any) -> Any:

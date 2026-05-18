@@ -2,6 +2,8 @@
 
 import argparse
 
+from sotto_soglia.config import GameConfig
+from sotto_soglia.critical import validate_critical_deck_order
 from sotto_soglia.exporters import (
     export_parametric_simulation_result,
     export_simulation_result,
@@ -196,12 +198,40 @@ def parse_color_effects_values(value: str) -> list[bool]:
     raise ValueError("--color-effects must be one of: both, on, off")
 
 
+def parse_on_off(value: str, option_name: str) -> bool:
+    """Parse an on/off CLI flag."""
+
+    if value == "on":
+        return True
+    if value == "off":
+        return False
+    raise ValueError(f"{option_name} must be one of: on, off")
+
+
 def format_strategy_setup(strategy_names: str | list[str]) -> str:
     """Format strategy settings for terminal output."""
 
     if isinstance(strategy_names, str):
         return strategy_names
     return ", ".join(strategy_names)
+
+
+def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
+    """Create game config values shared by normal, parametric and tournament runs."""
+
+    critical_deck_order = (
+        validate_critical_deck_order(args.critical_deck_order)
+        if args.critical_deck_order
+        else None
+    )
+    return GameConfig(
+        critical_card_effects_enabled=parse_on_off(
+            args.critical_card_effects,
+            "--critical-card-effects",
+        ),
+        critical_deck_seed=args.critical_deck_seed,
+        critical_deck_order=critical_deck_order,
+    )
 
 
 def main() -> None:
@@ -268,6 +298,23 @@ def main() -> None:
         default=None,
         help="Output directory for exported or generated files.",
     )
+    parser.add_argument(
+        "--critical-card-effects",
+        choices=["off", "on"],
+        default="off",
+        help="Enable experimental critical wound card effects.",
+    )
+    parser.add_argument(
+        "--critical-deck-seed",
+        type=int,
+        default=None,
+        help="Optional seed dedicated to critical wound deck order generation.",
+    )
+    parser.add_argument(
+        "--critical-deck-order",
+        default=None,
+        help="Fixed comma-separated 16-card critical wound deck order.",
+    )
 
     args = parser.parse_args()
     if args.plot_parametric:
@@ -309,6 +356,7 @@ def main() -> None:
 
         try:
             strategy_names = build_strategy_names_from_args(args)
+            critical_config = build_game_config_from_args(args)
             result = ParametricSimulationRunner().run(
                 players_count=args.players,
                 games_per_config=args.games,
@@ -317,6 +365,11 @@ def main() -> None:
                 critical_wounds_values=args.critical_wounds_values,
                 color_effects_values=parse_color_effects_values(args.color_effects),
                 strategy_names=strategy_names,
+                critical_card_effects_enabled=(
+                    critical_config.critical_card_effects_enabled
+                ),
+                critical_deck_seed=critical_config.critical_deck_seed,
+                critical_deck_order=critical_config.critical_deck_order,
             )
         except ValueError as error:
             parser.error(str(error))
@@ -340,11 +393,13 @@ def main() -> None:
                 "Use --tournament-strategies without --strategy or --strategies"
             )
         try:
+            critical_config = build_game_config_from_args(args)
             result = StrategyTournamentRunner().run(
                 players_count=args.players,
                 strategy_names=args.tournament_strategies,
                 games_per_lineup=args.games,
                 seed=args.seed,
+                config=critical_config,
             )
         except ValueError as error:
             parser.error(str(error))
@@ -364,6 +419,7 @@ def main() -> None:
 
     try:
         strategies = build_strategies_from_args(args)
+        config = build_game_config_from_args(args)
     except ValueError as error:
         parser.error(str(error))
 
@@ -372,6 +428,7 @@ def main() -> None:
         games_count=args.games,
         seed=args.seed,
         strategies=strategies,
+        config=config,
     )
     print(format_simulation_summary(result))
 

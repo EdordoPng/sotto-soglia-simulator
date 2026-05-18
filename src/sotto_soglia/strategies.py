@@ -60,6 +60,28 @@ class BaseStrategy:
 
         raise NotImplementedError
 
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Choose a target for a critical-card effect."""
+
+        return choose_fallback_critical_effect_target(valid_targets)
+
+
+def choose_fallback_critical_effect_target(
+    valid_targets: list[PlayerState],
+) -> PlayerState | None:
+    """Fallback target choice: alive valid opponent with the fewest lives."""
+
+    if not valid_targets:
+        return None
+    return min(valid_targets, key=lambda target: (target.lives, target.player_id))
+
 
 class RandomStrategy(BaseStrategy):
     """Strategy that selects a random card from the hand."""
@@ -76,6 +98,20 @@ class RandomStrategy(BaseStrategy):
         """Return a random card using the provided random generator."""
 
         return rng.choice(hand)
+
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Choose a random valid target."""
+
+        if not valid_targets:
+            return None
+        return rng.choice(valid_targets)
 
 
 class PrudentStrategy(BaseStrategy):
@@ -121,6 +157,20 @@ class DefensiveStrategy(BaseStrategy):
             return min(own_color_cards, key=_card_key)
         return min(hand, key=_card_key)
 
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Target the opponent with the highest lives."""
+
+        if not valid_targets:
+            return None
+        return max(valid_targets, key=lambda target: (target.lives, -target.player_id))
+
 
 class AggressiveStrategy(BaseStrategy):
     """Strategy that prefers cards matching alive opponents' colors."""
@@ -144,6 +194,18 @@ class AggressiveStrategy(BaseStrategy):
             return min(candidates, key=_card_key)
 
         return min(hand, key=_card_key)
+
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Target the opponent with the fewest lives."""
+
+        return choose_fallback_critical_effect_target(valid_targets)
 
 
 class AntiCriticalStrategy(BaseStrategy):
@@ -171,6 +233,20 @@ class AntiCriticalStrategy(BaseStrategy):
             ),
         )
         return sorted_candidates[len(sorted_candidates) // 2]
+
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Target the opponent furthest from critical-wound elimination."""
+
+        if not valid_targets:
+            return None
+        return min(valid_targets, key=lambda target: (target.critical_wounds, target.lives, target.player_id))
 
 
 class MixedStrategy(BaseStrategy):
@@ -200,6 +276,26 @@ class MixedStrategy(BaseStrategy):
             return (points, -card.value, -_color_order(card.color))
 
         return max(hand, key=score)
+
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Target using a simple lives and critical-wounds heuristic."""
+
+        if not valid_targets:
+            return None
+        return max(
+            valid_targets,
+            key=lambda target: (
+                target.critical_wounds * 2 + max(0, 8 - target.lives),
+                -target.player_id,
+            ),
+        )
 
 
 class AdaptivePressureStrategy(BaseStrategy):
@@ -277,6 +373,107 @@ class AdaptivePressureStrategy(BaseStrategy):
 
         return max(hand, key=score)
 
+    def choose_critical_effect_target(
+        self,
+        game_state: dict[str, Any] | None,
+        source_player: PlayerState,
+        effect_id: str,
+        valid_targets: list[PlayerState],
+        rng: Random,
+    ) -> PlayerState | None:
+        """Target the opponent under the most immediate pressure."""
+
+        if not valid_targets:
+            return None
+        return max(
+            valid_targets,
+            key=lambda target: (
+                target.critical_wounds * 2.0 + max(0, 10 - target.lives),
+                -target.lives,
+                -target.player_id,
+            ),
+        )
+
+
+class CriticalAdaptiveStrategy(AdaptivePressureStrategy):
+    """Adaptive strategy aware of active critical wound card effects."""
+
+    name = "critical_adaptive"
+
+    def choose_card(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+        rng: Random,
+    ) -> Card:
+        """Choose a card using adaptive pressure plus critical-effect context."""
+
+        opponents_by_color = {
+            opponent.color: opponent
+            for opponent in _alive_opponents(player, game_state)
+        }
+        active_effects = set(player.active_critical_effects)
+        critical_limit = 3
+        if game_state and game_state.get("config") is not None:
+            critical_limit = game_state["config"].critical_wounds_limit
+
+        def score(card: Card) -> tuple[float, bool, float, int, int]:
+            points = -card.value * 1.15
+            one_wound_from_elimination = (
+                player.critical_wounds >= critical_limit - 1
+            )
+
+            if one_wound_from_elimination:
+                points -= max(0, 4 - card.value) * 4.0
+            elif player.critical_wounds >= max(1, critical_limit - 2):
+                points -= max(0, 3 - card.value) * 2.0
+            else:
+                points -= max(0, 3 - card.value) * 0.7
+
+            if card.color == player.color:
+                points += 2.0
+                if "sangue_freddo" in active_effects:
+                    points += 2.0
+                if player.lives <= 6:
+                    points += 1.5
+
+            opponent = opponents_by_color.get(card.color)
+            vulnerability = 0.0
+            if opponent is not None:
+                vulnerability += opponent.critical_wounds * 1.4
+                if opponent.lives <= 3:
+                    vulnerability += 4.0
+                elif opponent.lives <= 6:
+                    vulnerability += 2.5
+                elif opponent.lives <= 9:
+                    vulnerability += 1.0
+                points += 1.5 + vulnerability
+
+            if "scudo_istintivo" in active_effects:
+                points += 0.5
+            if "ferita_esposta" in active_effects:
+                points -= 1.0
+                if card.color != player.color:
+                    points -= 0.5
+            if "colpo_di_coda" in active_effects and not one_wound_from_elimination:
+                points += max(0, 3 - card.value) * 0.5
+
+            if player.lives <= 3:
+                points += (6 - card.value) * 1.1
+
+            too_risky = one_wound_from_elimination and card.value <= 2
+            value_preference = card.value if too_risky else -card.value
+            return (
+                points,
+                card.color == player.color,
+                vulnerability,
+                value_preference,
+                -_color_order(card.color),
+            )
+
+        return max(hand, key=score)
+
 
 AVAILABLE_STRATEGIES = {
     RandomStrategy.name: RandomStrategy,
@@ -286,6 +483,7 @@ AVAILABLE_STRATEGIES = {
     AntiCriticalStrategy.name: AntiCriticalStrategy,
     MixedStrategy.name: MixedStrategy,
     AdaptivePressureStrategy.name: AdaptivePressureStrategy,
+    CriticalAdaptiveStrategy.name: CriticalAdaptiveStrategy,
 }
 
 

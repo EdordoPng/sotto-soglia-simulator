@@ -18,6 +18,9 @@ class SimulationResult:
     base_seed: int
     game_results: list[GameResult] = field(default_factory=list)
     aggregate_stats: dict = field(default_factory=dict)
+    critical_card_effects_enabled: bool = False
+    critical_deck_seed: int | None = None
+    critical_deck_order: tuple[str, ...] | None = None
 
 
 class SimulationRunner:
@@ -61,4 +64,7 @@ class SimulationRunner:
             base_seed=seed,
             game_results=game_results,
             aggregate_stats=aggregate_stats,
+            critical_card_effects_enabled=config.critical_card_effects_enabled,
+            critical_deck_seed=config.critical_deck_seed,
+            critical_deck_order=config.critical_deck_order,
         )

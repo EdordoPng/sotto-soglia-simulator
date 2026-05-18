@@ -2,6 +2,17 @@
 
 from collections.abc import Sequence
 
+from sotto_soglia.critical import (
+    BENDAGGIO_EMERGENZA,
+    COLPO_DI_CODA,
+    FERITA_ESPOSTA,
+    MANO_LUCIDA,
+    MANO_TREMANTE,
+    SANGUE_FREDDO,
+    SCUDO_ISTINTIVO,
+    SONO_ANCORA_QUI,
+    CRITICAL_CARD_IDS,
+)
 from sotto_soglia.game import GameResult
 from sotto_soglia.models import Color, EliminationReason
 
@@ -54,7 +65,7 @@ class StatisticAggregator:
                 winner_lives.append(winner.lives)
                 winner_critical_wounds.append(winner.critical_wounds)
 
-        return {
+        stats = {
             "games_count": games_count,
             "average_rounds": sum(rounds) / games_count,
             "min_rounds": min(rounds),
@@ -81,11 +92,13 @@ class StatisticAggregator:
             "average_winner_lives": self._average(winner_lives),
             "average_winner_critical_wounds": self._average(winner_critical_wounds),
         }
+        stats.update(self._critical_card_stats(game_results))
+        return stats
 
     def _empty_stats(self) -> dict:
         """Return a stable empty aggregate structure."""
 
-        return {
+        stats = {
             "games_count": 0,
             "average_rounds": 0.0,
             "min_rounds": 0,
@@ -103,6 +116,8 @@ class StatisticAggregator:
             "average_winner_lives": 0.0,
             "average_winner_critical_wounds": 0.0,
         }
+        stats.update(self._empty_critical_card_stats())
+        return stats
 
     def _average(self, values: Sequence[int]) -> float:
         """Return the numeric average or zero for an empty sequence."""
@@ -110,3 +125,107 @@ class StatisticAggregator:
         if not values:
             return 0.0
         return sum(values) / len(values)
+
+    def _empty_critical_card_stats(self) -> dict:
+        """Return stable zero critical-card aggregate metrics."""
+
+        return {
+            "critical_cards_drawn_total": 0,
+            "critical_effects_triggered_total": 0,
+            "critical_effects_by_card": {card_id: 0 for card_id in CRITICAL_CARD_IDS},
+            "average_life_delta_by_card": {card_id: 0.0 for card_id in CRITICAL_CARD_IDS},
+            "total_life_gained_from_critical_cards": 0,
+            "total_life_lost_from_critical_cards": 0,
+            "total_damage_prevented_by_critical_cards": 0,
+            "colpo_di_coda_trigger_count": 0,
+            "sono_ancora_qui_trigger_count": 0,
+            "bendaggio_trigger_count": 0,
+            "mano_lucida_trigger_count": 0,
+            "mano_tremante_trigger_count": 0,
+            "sangue_freddo_trigger_count": 0,
+            "scudo_istintivo_trigger_count": 0,
+            "ferita_esposta_trigger_count": 0,
+            "critical_card_stats": {
+                card_id: {
+                    "draw_count": 0,
+                    "activation_count": 0,
+                    "total_life_delta": 0,
+                    "average_life_delta": 0.0,
+                    "win_count_after_draw": 0,
+                    "elimination_count_after_draw": 0,
+                }
+                for card_id in CRITICAL_CARD_IDS
+            },
+        }
+
+    def _critical_card_stats(self, game_results: Sequence[GameResult]) -> dict:
+        """Aggregate critical wound card metrics from game event logs."""
+
+        stats = self._empty_critical_card_stats()
+        life_delta_totals = {card_id: 0 for card_id in CRITICAL_CARD_IDS}
+        draw_counts = {card_id: 0 for card_id in CRITICAL_CARD_IDS}
+
+        for result in game_results:
+            winner_ids = set(result.winner_ids) if not result.is_draw else set()
+            player_by_id = {
+                player.player_id: player
+                for player in result.final_players
+            }
+            for player in result.final_players:
+                stats["total_life_gained_from_critical_cards"] += (
+                    player.life_gained_from_critical_cards
+                )
+                stats["total_life_lost_from_critical_cards"] += (
+                    player.life_lost_from_critical_cards
+                )
+                stats["total_damage_prevented_by_critical_cards"] += (
+                    player.damage_prevented_by_critical_cards
+                )
+
+            for event in result.critical_events:
+                card_id = event.critical_card_id
+                if card_id not in CRITICAL_CARD_IDS:
+                    continue
+                life_delta = event.life_delta_player + sum(event.life_delta_targets.values())
+                life_delta_totals[card_id] += life_delta
+                if event.deck_position is not None:
+                    draw_counts[card_id] += 1
+                    stats["critical_cards_drawn_total"] += 1
+                    player = player_by_id.get(event.player_id)
+                    if event.player_id in winner_ids:
+                        stats["critical_card_stats"][card_id]["win_count_after_draw"] += 1
+                    if player is not None and not player.is_alive:
+                        stats["critical_card_stats"][card_id][
+                            "elimination_count_after_draw"
+                        ] += 1
+                if event.effect_triggered:
+                    stats["critical_effects_triggered_total"] += 1
+                    stats["critical_effects_by_card"][card_id] += 1
+
+        trigger_key_by_card = {
+            BENDAGGIO_EMERGENZA: "bendaggio_trigger_count",
+            SANGUE_FREDDO: "sangue_freddo_trigger_count",
+            MANO_LUCIDA: "mano_lucida_trigger_count",
+            SCUDO_ISTINTIVO: "scudo_istintivo_trigger_count",
+            MANO_TREMANTE: "mano_tremante_trigger_count",
+            COLPO_DI_CODA: "colpo_di_coda_trigger_count",
+            FERITA_ESPOSTA: "ferita_esposta_trigger_count",
+            SONO_ANCORA_QUI: "sono_ancora_qui_trigger_count",
+        }
+        for card_id in CRITICAL_CARD_IDS:
+            draw_count = draw_counts[card_id]
+            activation_count = stats["critical_effects_by_card"][card_id]
+            total_life_delta = life_delta_totals[card_id]
+            average_life_delta = total_life_delta / activation_count if activation_count else 0.0
+            stats["average_life_delta_by_card"][card_id] = average_life_delta
+            stats[trigger_key_by_card[card_id]] = activation_count
+            stats["critical_card_stats"][card_id].update(
+                {
+                    "draw_count": draw_count,
+                    "activation_count": activation_count,
+                    "total_life_delta": total_life_delta,
+                    "average_life_delta": average_life_delta,
+                }
+            )
+
+        return stats

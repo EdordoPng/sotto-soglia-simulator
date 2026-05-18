@@ -44,6 +44,7 @@ Sono implementati:
 - tournament controbilanciato tra strategie;
 - simulazioni parametriche;
 - generazione di grafici per il report.
+- modalità sperimentale opzionale per carte Ferita Critica con effetti.
 
 ---
 
@@ -85,8 +86,13 @@ Il simulatore include le seguenti strategie:
 | `anti_critical` | evita carte troppo basse per ridurre il rischio Ferita Critica |
 | `mixed` | bilancia valore basso, colore proprio e colore avversario |
 | `adaptive_pressure` | strategia euristica più avanzata: combina pressione offensiva, difesa e gestione del rischio Ferita Critica |
+| `critical_adaptive` | strategia sperimentale basata su `adaptive_pressure`, consapevole degli effetti Ferita Critica attivi |
 
 La strategia `adaptive_pressure` è risultata la più forte nei confronti controbilanciati tra strategie.
+
+La modalità sperimentale delle carte Ferita Critica è disattivata di default e
+si abilita con `--critical-card-effects on`. La documentazione operativa è in
+[docs/critical_wound_cards_simulation.md](docs/critical_wound_cards_simulation.md).
 
 ---
 
