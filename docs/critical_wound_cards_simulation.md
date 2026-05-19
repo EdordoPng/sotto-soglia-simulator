@@ -32,7 +32,7 @@ The critical wound deck has 16 cards: 8 effects, 2 copies each.
 | `mano_tremante` | Mano Tremante | Next round | Ricevi 2 carte invece di 3 e ne scegli 1. |
 | `colpo_di_coda` | Colpo di Coda | Next round | Se ricevi di nuovo Ferita Critica, scegli un avversario valido: perde 2 vite. |
 | `ferita_esposta` | Ferita Esposta | Next round | Se non ricevi Ferita Critica, il primo danno extra subito vale 2 invece di 1. |
-| `sono_ancora_qui` | Sono ancora qui | Immediate | Scegli un avversario valido: perde 1 vita. |
+| `sono_ancora_qui` | Sono ancora qui | Immediate | Scegli un avversario valido: perde 2 vite. |
 
 The critical wound deck is shuffled once at the beginning of each game. It is
 not reshuffled during the game. If the deck is exhausted, new critical wounds
@@ -43,7 +43,7 @@ are still counted but no extra effect is drawn.
 ```powershell
 --critical-card-effects off/on
 --critical-deck-seed 123
---sono-ancora-qui-variant single_1
+--sono-ancora-qui-variant single_2
 --critical-deck-order bendaggio_emergenza,bendaggio_emergenza,sangue_freddo,sangue_freddo,mano_lucida,mano_lucida,scudo_istintivo,scudo_istintivo,mano_tremante,mano_tremante,colpo_di_coda,colpo_di_coda,ferita_esposta,ferita_esposta,sono_ancora_qui,sono_ancora_qui
 ```
 
@@ -54,7 +54,8 @@ provided, the game seed controls the critical deck order.
 of every effect. When provided, the same fixed order is used for every game.
 
 `--sono-ancora-qui-variant` is experimental and only matters when
-`--critical-card-effects on` is enabled:
+`--critical-card-effects on` is enabled. The current v0.4 rules default is
+`single_2`; the other values are kept for comparative simulations:
 
 | Variant | Effect |
 | --- | --- |

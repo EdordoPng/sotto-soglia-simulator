@@ -23,6 +23,7 @@ from sotto_soglia.critical import (
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
+    SONO_ANCORA_QUI_SINGLE_1,
     SONO_ANCORA_QUI_SINGLE_2,
     SONO_ANCORA_QUI_UP_TO_2_TARGETS,
     build_critical_deck,
@@ -43,7 +44,7 @@ from sotto_soglia.strategies import (
 )
 
 
-def _critical_config(deck_order=None, sono_variant="single_1"):
+def _critical_config(deck_order=None, sono_variant="single_2"):
     return GameConfig(
         initial_lives=18,
         critical_wounds_limit=5,
@@ -176,7 +177,7 @@ def test_bendaggio_does_not_exceed_initial_lives():
     assert players[0].life_gained_from_critical_cards == 1
 
 
-def test_sono_ancora_qui_damages_only_valid_nonimmune_opponents():
+def test_sono_ancora_qui_default_damages_one_valid_nonimmune_opponent_for_two():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=18),
         PlayerState(player_id=2, color=Color.RED, lives=18),
@@ -196,7 +197,7 @@ def test_sono_ancora_qui_damages_only_valid_nonimmune_opponents():
 
     assert players[0].lives == 18
     assert players[1].lives == 18
-    assert players[2].lives == 14
+    assert players[2].lives == 13
 
 
 def test_bendaggio_recovers_one_life_not_two():
@@ -216,7 +217,7 @@ def test_bendaggio_recovers_one_life_not_two():
     assert players[0].life_gained_from_critical_cards == 1
 
 
-def test_sono_ancora_qui_hits_only_one_valid_target_and_logs_target():
+def test_sono_ancora_qui_default_hits_only_one_valid_target_and_logs_two_damage():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=18),
         PlayerState(player_id=2, color=Color.RED, lives=10),
@@ -242,8 +243,34 @@ def test_sono_ancora_qui_hits_only_one_valid_target_and_logs_target():
     ]
     assert len(sono_events) == 1
     assert sono_events[0].target_player_id == "4"
-    assert sono_events[0].life_delta_targets == {4: -1}
+    assert sono_events[0].life_delta_targets == {4: -2}
     assert len(sono_events[0].life_delta_targets) == 1
+
+
+def test_sono_ancora_qui_single_1_variant_hits_one_target_for_one_life():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=18),
+        PlayerState(player_id=2, color=Color.RED, lives=4),
+        PlayerState(player_id=3, color=Color.GREEN, lives=8),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+            3: Card(Color.GREEN, 4),
+        },
+        _critical_config(sono_variant=SONO_ANCORA_QUI_SINGLE_1),
+        critical_deck=[SONO_ANCORA_QUI],
+        strategies={1: create_strategy("critical_adaptive")},
+    )
+
+    sono_event = [
+        event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
+    ][0]
+    assert sono_event.target_player_id == "2"
+    assert sono_event.life_delta_targets == {2: -1}
 
 
 def test_sono_ancora_qui_single_2_hits_one_target_for_two_life_without_below_zero():
@@ -356,7 +383,7 @@ def test_sono_ancora_qui_does_not_hit_eliminated_immune_or_self():
         event for event in result.critical_events if event.critical_card_id == SONO_ANCORA_QUI
     ][0]
     assert sono_event.target_player_id == "4"
-    assert sono_event.life_delta_targets == {4: -1}
+    assert sono_event.life_delta_targets == {4: -2}
     assert players[0].lives == 18
     assert players[1].lives == 18
     assert players[2].lives == 5
@@ -748,7 +775,7 @@ def test_cli_accepts_critical_adaptive_and_critical_flags(tmp_path):
     assert (tmp_path / "critical_events.csv").exists()
 
 
-def test_cli_defaults_sono_ancora_qui_variant_to_single_1(tmp_path):
+def test_cli_defaults_sono_ancora_qui_variant_to_single_2(tmp_path):
     subprocess.run(
         [
             sys.executable,
@@ -775,7 +802,7 @@ def test_cli_defaults_sono_ancora_qui_variant_to_single_1(tmp_path):
     with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
         config = json.load(file)
 
-    assert config["sono_ancora_qui_variant"] == "single_1"
+    assert config["sono_ancora_qui_variant"] == "single_2"
 
 
 def test_cli_exports_sono_ancora_qui_variant_and_critical_damage(tmp_path):

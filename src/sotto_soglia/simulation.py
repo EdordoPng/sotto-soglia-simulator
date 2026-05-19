@@ -24,7 +24,7 @@ class SimulationResult:
     critical_card_effects_enabled: bool = False
     critical_deck_seed: int | None = None
     critical_deck_order: tuple[str, ...] | None = None
-    sono_ancora_qui_variant: str = "single_1"
+    sono_ancora_qui_variant: str = "single_2"
 
 
 class SimulationRunner:

@@ -341,8 +341,8 @@ def main() -> None:
     parser.add_argument(
         "--sono-ancora-qui-variant",
         choices=SONO_ANCORA_QUI_VARIANTS,
-        default="single_1",
-        help="Experimental Sono ancora qui variant used when critical-card-effects is on.",
+        default="single_2",
+        help="Experimental Sono ancora qui variant used when critical-card-effects is on (default: single_2).",
     )
 
     args = parser.parse_args()
