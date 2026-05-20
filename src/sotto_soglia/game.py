@@ -6,11 +6,13 @@ from random import Random
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
+    LEGACY_CRITICAL_DECK_PROFILE_ID,
     MANO_LUCIDA,
     MANO_TREMANTE,
     CriticalCardEvent,
     build_critical_deck,
     critical_card_name,
+    get_critical_deck_profile,
 )
 from sotto_soglia.deck import build_deck
 from sotto_soglia.models import Card, Color, PlayerState
@@ -123,10 +125,18 @@ def _build_game_critical_deck(config: GameConfig, seed: int | None, game_id: int
 
     if not config.critical_card_effects_enabled:
         return []
+
+    profile = get_critical_deck_profile(config.critical_deck_profile_id)
+    if profile.profile_id != LEGACY_CRITICAL_DECK_PROFILE_ID:
+        raise NotImplementedError(
+            f"Critical deck profile '{profile.profile_id}' is not implemented "
+            "in the runtime yet."
+        )
+
     if config.critical_deck_order is not None:
         return list(config.critical_deck_order)
 
-    deck = build_critical_deck()
+    deck = build_critical_deck(profile)
     deck_seed = config.critical_deck_seed
     if deck_seed is None:
         deck_seed = seed

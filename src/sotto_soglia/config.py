@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, replace
 
+from sotto_soglia.critical import LEGACY_CRITICAL_DECK_PROFILE_ID
+
 
 V05_PLAYER_PRESETS = {
     2: {
@@ -34,6 +36,7 @@ class GameConfig:
     max_players: int = 4
     card_values: tuple[int, ...] = (1, 2, 3, 4, 5)
     critical_card_effects_enabled: bool = False
+    critical_deck_profile_id: str = LEGACY_CRITICAL_DECK_PROFILE_ID
     critical_deck_seed: int | None = None
     critical_deck_order: tuple[str, ...] | None = None
     sono_ancora_qui_variant: str = "single_2"
@@ -59,4 +62,5 @@ def get_v05_config_for_players(
         initial_lives=preset["initial_lives"],
         critical_wounds_limit=preset["critical_wounds_limit"],
         color_effects_enabled=preset["color_effects_enabled"],
+        critical_deck_profile_id=LEGACY_CRITICAL_DECK_PROFILE_ID,
     )

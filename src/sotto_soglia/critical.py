@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from random import Random
 
 
-LEGACY_CRITICAL_DECK_PROFILE_ID = "legacy_critical_wounds"
+LEGACY_CRITICAL_DECK_PROFILE_ID = "legacy"
 V05_HUNGER_DECK_PROFILE_ID = "v05_hunger"
 
 BENDAGGIO_EMERGENZA = "bendaggio_emergenza"
@@ -104,6 +104,11 @@ V05_HUNGER_DECK_PROFILE = CriticalDeckProfile(
     copies_per_effect=3,
 )
 
+CRITICAL_DECK_PROFILES = {
+    LEGACY_CRITICAL_DECK_PROFILE.profile_id: LEGACY_CRITICAL_DECK_PROFILE,
+    V05_HUNGER_DECK_PROFILE.profile_id: V05_HUNGER_DECK_PROFILE,
+}
+
 
 @dataclass
 class CriticalCardEvent:
@@ -126,11 +131,35 @@ class CriticalCardEvent:
     player_critical_wounds_after: int = 0
 
 
+def get_critical_deck_profile(profile_id: str) -> CriticalDeckProfile:
+    """Return a deck profile by id or raise a clear error."""
+
+    try:
+        return CRITICAL_DECK_PROFILES[profile_id]
+    except KeyError as error:
+        valid_ids = ", ".join(sorted(CRITICAL_DECK_PROFILES))
+        raise ValueError(
+            f"Unknown critical deck profile '{profile_id}'. "
+            f"Available profiles: {valid_ids}"
+        ) from error
+
+
+def _resolve_critical_deck_profile(
+    profile: CriticalDeckProfile | str,
+) -> CriticalDeckProfile:
+    """Normalize a profile object or id to a profile object."""
+
+    if isinstance(profile, CriticalDeckProfile):
+        return profile
+    return get_critical_deck_profile(profile)
+
+
 def build_critical_deck(
-    profile: CriticalDeckProfile = LEGACY_CRITICAL_DECK_PROFILE,
+    profile: CriticalDeckProfile | str = LEGACY_CRITICAL_DECK_PROFILE,
 ) -> list[str]:
     """Return an unshuffled deck for the selected profile."""
 
+    profile = _resolve_critical_deck_profile(profile)
     return [
         card_id
         for card_id in profile.card_ids
@@ -140,7 +169,7 @@ def build_critical_deck(
 
 def shuffle_critical_deck(
     seed: int | None = None,
-    profile: CriticalDeckProfile = LEGACY_CRITICAL_DECK_PROFILE,
+    profile: CriticalDeckProfile | str = LEGACY_CRITICAL_DECK_PROFILE,
 ) -> list[str]:
     """Return a shuffled deck for the selected profile reproducible by seed."""
 

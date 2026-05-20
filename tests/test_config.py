@@ -12,6 +12,10 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.cli import build_game_config_from_args
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
+from sotto_soglia.critical import (
+    LEGACY_CRITICAL_DECK_PROFILE_ID,
+    V05_HUNGER_DECK_PROFILE_ID,
+)
 from sotto_soglia.simulation import SimulationRunner
 
 
@@ -37,6 +41,7 @@ def test_game_config_keeps_legacy_numeric_defaults():
     assert config.initial_lives == 18
     assert config.critical_wounds_limit == 3
     assert config.color_effects_enabled is True
+    assert config.critical_deck_profile_id == LEGACY_CRITICAL_DECK_PROFILE_ID
 
 
 @pytest.mark.parametrize(
@@ -57,6 +62,7 @@ def test_v05_config_for_players_returns_numeric_presets(
     assert config.initial_lives == initial_lives
     assert config.critical_wounds_limit == critical_wounds_limit
     assert config.color_effects_enabled is False
+    assert config.critical_deck_profile_id == LEGACY_CRITICAL_DECK_PROFILE_ID
 
 
 def test_v05_config_for_players_rejects_invalid_player_count():
@@ -65,6 +71,15 @@ def test_v05_config_for_players_rejects_invalid_player_count():
         match="players_count must be one of: 2, 3, 4",
     ):
         get_v05_config_for_players(5)
+
+
+def test_v05_config_for_players_forces_runtime_safe_legacy_deck_profile():
+    config = get_v05_config_for_players(
+        4,
+        base_config=GameConfig(critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID),
+    )
+
+    assert config.critical_deck_profile_id == LEGACY_CRITICAL_DECK_PROFILE_ID
 
 
 @pytest.mark.parametrize(

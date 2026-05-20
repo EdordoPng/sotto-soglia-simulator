@@ -6,6 +6,8 @@ from collections import Counter
 from pathlib import Path
 from random import Random
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = PROJECT_ROOT / "src"
@@ -21,6 +23,7 @@ from sotto_soglia.critical import (
     FERITA_ESPOSTA,
     FIUTO_DA_DISPENSA,
     LEGACY_CRITICAL_DECK_PROFILE,
+    LEGACY_CRITICAL_DECK_PROFILE_ID,
     MANO_LUCIDA,
     MANO_TREMANTE,
     MORSO_DELLA_FAME,
@@ -36,7 +39,9 @@ from sotto_soglia.critical import (
     V05_HUNGER_CARD_IDS,
     V05_HUNGER_CARD_NAMES,
     V05_HUNGER_DECK_PROFILE,
+    V05_HUNGER_DECK_PROFILE_ID,
     build_critical_deck,
+    get_critical_deck_profile,
     shuffle_critical_deck,
     validate_critical_deck_order,
 )
@@ -75,11 +80,32 @@ def test_critical_deck_contains_two_copies_of_eight_effects():
 def test_legacy_critical_deck_profile_matches_existing_deck_composition():
     deck = build_critical_deck(LEGACY_CRITICAL_DECK_PROFILE)
 
+    assert LEGACY_CRITICAL_DECK_PROFILE.profile_id == "legacy"
     assert LEGACY_CRITICAL_DECK_PROFILE.deck_name == "Mazzo Ferita Critica"
     assert LEGACY_CRITICAL_DECK_PROFILE.cards_count == 16
     assert LEGACY_CRITICAL_DECK_PROFILE.copies_per_effect == 2
     assert LEGACY_CRITICAL_DECK_PROFILE.card_ids == CRITICAL_CARD_IDS
     assert Counter(deck) == {card_id: 2 for card_id in CRITICAL_CARD_IDS}
+
+
+def test_critical_deck_profiles_are_recoverable_by_id():
+    assert (
+        get_critical_deck_profile(LEGACY_CRITICAL_DECK_PROFILE_ID)
+        is LEGACY_CRITICAL_DECK_PROFILE
+    )
+    assert (
+        get_critical_deck_profile(V05_HUNGER_DECK_PROFILE_ID)
+        is V05_HUNGER_DECK_PROFILE
+    )
+
+
+def test_unknown_critical_deck_profile_id_raises_clear_error():
+    with pytest.raises(ValueError) as error_info:
+        get_critical_deck_profile("unknown_profile")
+
+    assert "Unknown critical deck profile 'unknown_profile'" in str(error_info.value)
+    assert "legacy" in str(error_info.value)
+    assert "v05_hunger" in str(error_info.value)
 
 
 def test_v05_hunger_deck_profile_contains_six_effects_and_eighteen_cards():
@@ -92,6 +118,16 @@ def test_v05_hunger_deck_profile_contains_six_effects_and_eighteen_cards():
     assert len(deck) == 18
     assert set(deck) == set(V05_HUNGER_CARD_IDS)
     assert Counter(deck) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
+
+
+def test_critical_deck_can_be_built_from_profile_id():
+    legacy_deck = build_critical_deck(LEGACY_CRITICAL_DECK_PROFILE_ID)
+    hunger_deck = build_critical_deck(V05_HUNGER_DECK_PROFILE_ID)
+
+    assert len(legacy_deck) == 16
+    assert Counter(legacy_deck) == {card_id: 2 for card_id in CRITICAL_CARD_IDS}
+    assert len(hunger_deck) == 18
+    assert Counter(hunger_deck) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
 
 
 def test_v05_hunger_deck_profile_uses_expected_effect_names():
@@ -113,6 +149,25 @@ def test_v05_hunger_deck_shuffle_is_reproducible_with_seed():
     assert first == second
     assert first != different_seed
     assert Counter(first) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
+
+
+def test_v05_hunger_profile_is_not_silently_used_in_runtime_before_effects_exist():
+    config = GameConfig(
+        critical_card_effects_enabled=True,
+        critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
+    )
+
+    with pytest.raises(NotImplementedError) as error_info:
+        SimulationRunner().run(
+            players_count=2,
+            games_count=1,
+            seed=42,
+            config=config,
+        )
+
+    assert "Critical deck profile 'v05_hunger' is not implemented" in str(
+        error_info.value
+    )
 
 
 def test_critical_deck_shuffle_is_reproducible_with_seed():
