@@ -31,8 +31,8 @@ MORSO_DELLA_FAME = "morso_della_fame"
 RESPIRO_CALMO = "respiro_calmo"
 
 V05_HUNGER_IMMEDIATE_EFFECTS = {BRICIOLA_NASCOSTA}
+V05_HUNGER_NEXT_ROUND_EFFECTS = {RAZIONE_RISPARMIATA}
 V05_HUNGER_UNIMPLEMENTED_EFFECTS = {
-    RAZIONE_RISPARMIATA,
     FIUTO_DA_DISPENSA,
     PANCIA_BRONTOLANTE,
     MORSO_DELLA_FAME,
@@ -271,5 +271,9 @@ def resolve_v05_hunger_effect(
         life_delta = player.lives - before
         player.life_gained_from_critical_cards += life_delta
         return life_delta
+
+    if card_id == RAZIONE_RISPARMIATA:
+        player.active_critical_effects.append(card_id)
+        return 0
 
     raise NotImplementedError(f"v0.5 hunger effect '{card_id}' is not implemented yet.")

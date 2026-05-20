@@ -211,10 +211,170 @@ def test_briciola_nascosta_does_not_exceed_initial_scorte():
     assert result.critical_events[0].player_critical_wounds_after == 1
 
 
+def test_razione_risparmiata_registers_next_round_effect_without_immediate_scorte_change():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=10),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[RAZIONE_RISPARMIATA],
+    )
+
+    assert players[0].lives == 10
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == [RAZIONE_RISPARMIATA]
+    assert players[0].active_critical_effects == [RAZIONE_RISPARMIATA]
+
+    event = result.critical_events[0]
+    assert event.critical_card_id == RAZIONE_RISPARMIATA
+    assert event.critical_card_name == "Razione Risparmiata"
+    assert event.timing == "next_round"
+    assert event.effect_triggered is False
+    assert event.life_delta_player == 0
+    assert event.player_lives_after == 10
+    assert event.player_critical_wounds_after == 1
+
+
+def test_razione_risparmiata_reduces_next_round_consumption_by_one():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[RAZIONE_RISPARMIATA],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 3
+    assert result.total_damage_by_player[1] == 3
+    assert players[0].lives == 9
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [RAZIONE_RISPARMIATA]
+
+    razione_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == RAZIONE_RISPARMIATA
+    ][0]
+    assert razione_event.effect_triggered is True
+    assert razione_event.prevented_damage == 1
+
+
+def test_razione_risparmiata_keeps_next_round_consumption_minimum_one():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[RAZIONE_RISPARMIATA],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 3, custom_consumption_value=1),
+            2: Card(Color.RED, 1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 1
+    assert players[0].lives == 11
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [RAZIONE_RISPARMIATA]
+
+    razione_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == RAZIONE_RISPARMIATA
+    ][0]
+    assert razione_event.effect_triggered is False
+    assert razione_event.prevented_damage == 0
+
+
+def test_razione_risparmiata_does_not_reduce_consumption_when_player_gets_affamato():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[RAZIONE_RISPARMIATA],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 4)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[1] == 0
+    assert players[0].lives == 12
+    assert players[0].critical_wounds == 1
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [RAZIONE_RISPARMIATA]
+
+    razione_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == RAZIONE_RISPARMIATA
+    ][0]
+    assert razione_event.effect_triggered is False
+    assert razione_event.prevented_damage == 0
+
+
+def test_razione_risparmiata_is_not_applied_twice():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[RAZIONE_RISPARMIATA],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    config = _v05_hunger_controlled_config()
+
+    first_result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        config,
+        critical_deck=[],
+    )
+    second_result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        config,
+        critical_deck=[],
+    )
+
+    assert first_result.base_damage_by_player[1] == 3
+    assert second_result.base_damage_by_player[1] == 4
+    assert players[0].lives == 5
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [RAZIONE_RISPARMIATA]
+
+
 @pytest.mark.parametrize(
     "card_id",
     [
-        RAZIONE_RISPARMIATA,
         FIUTO_DA_DISPENSA,
         PANCIA_BRONTOLANTE,
         MORSO_DELLA_FAME,

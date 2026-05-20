@@ -9,12 +9,14 @@ from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
     COLPO_DI_CODA,
     FERITA_ESPOSTA,
+    RAZIONE_RISPARMIATA,
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
     SONO_ANCORA_QUI_SINGLE_2,
     SONO_ANCORA_QUI_UP_TO_2_TARGETS,
     V05_HUNGER_CARD_IDS,
+    V05_HUNGER_IMMEDIATE_EFFECTS,
     CriticalCardEvent,
     critical_card_name,
     critical_card_timing,
@@ -263,7 +265,7 @@ def _draw_and_apply_critical_card(
     if card_id in V05_HUNGER_CARD_IDS:
         life_delta_player = resolve_v05_hunger_effect(card_id, player, config)
         critical_life_delta_by_player[player_id] += life_delta_player
-        effect_triggered = True
+        effect_triggered = card_id in V05_HUNGER_IMMEDIATE_EFFECTS
     elif card_id == BENDAGGIO_EMERGENZA:
         before = player.lives
         player.lives = min(config.initial_lives, player.lives + 1)
@@ -368,12 +370,38 @@ def _calculate_base_damage_with_critical_effects(
     game_id: int,
     round_number: int,
 ) -> int:
-    """Calculate base damage with Sangue Freddo support."""
+    """Calculate base damage with supported next-round critical effects."""
 
     if received_critical_wound:
+        if RAZIONE_RISPARMIATA in active_effects:
+            critical_events.append(
+                _effect_event(
+                    game_id,
+                    round_number,
+                    player,
+                    RAZIONE_RISPARMIATA,
+                    effect_triggered=False,
+                )
+            )
         return 0
 
     damage = card.consumption_value
+    if RAZIONE_RISPARMIATA in active_effects:
+        before = damage
+        damage = max(1, damage - 1)
+        prevented = before - damage
+        critical_events.append(
+            _effect_event(
+                game_id,
+                round_number,
+                player,
+                RAZIONE_RISPARMIATA,
+                effect_triggered=prevented > 0,
+                prevented_damage=prevented,
+            )
+        )
+        player.damage_prevented_by_critical_cards += prevented
+
     reduction = 0
     if color_effects_enabled and card.color == player.color:
         reduction = 2 if SANGUE_FREDDO in active_effects else 1
