@@ -13,36 +13,41 @@ from sotto_soglia.round import resolve_round
 from sotto_soglia.rules import calculate_base_damage
 
 
-class AdjustedValueCard:
-    """Minimal card-like test double with separated engine values."""
-
-    def __init__(
-        self,
-        color: Color,
-        value: int,
-        consumption_value: int,
-        comparison_value: int,
-    ):
-        self.color = color
-        self.value = value
-        self._consumption_value = consumption_value
-        self._comparison_value = comparison_value
-
-    @property
-    def consumption_value(self) -> int:
-        return self._consumption_value
-
-    @property
-    def comparison_value(self) -> int:
-        return self._comparison_value
-
-
 def test_standard_card_uses_printed_value_for_consumption_and_comparison():
     card = Card(color=Color.BLUE, value=4)
 
     assert card.value == 4
     assert card.consumption_value == 4
     assert card.comparison_value == 4
+
+
+def test_card_with_comparison_override_keeps_printed_and_consumption_values():
+    card = Card(color=Color.BLUE, value=1, custom_comparison_value=2)
+
+    assert card.value == 1
+    assert card.consumption_value == 1
+    assert card.comparison_value == 2
+
+
+def test_card_with_consumption_override_keeps_printed_and_comparison_values():
+    card = Card(color=Color.BLUE, value=4, custom_consumption_value=2)
+
+    assert card.value == 4
+    assert card.consumption_value == 2
+    assert card.comparison_value == 4
+
+
+def test_card_with_both_value_overrides_uses_both():
+    card = Card(
+        color=Color.BLUE,
+        value=4,
+        custom_consumption_value=2,
+        custom_comparison_value=5,
+    )
+
+    assert card.value == 4
+    assert card.consumption_value == 2
+    assert card.comparison_value == 5
 
 
 def test_single_lowest_value_gets_critical_and_other_player_loses_card_value():
@@ -84,11 +89,10 @@ def test_own_color_reduces_base_damage_by_one():
 
 def test_legacy_own_color_reduction_starts_from_consumption_value():
     player = PlayerState(player_id=1, color=Color.BLUE, lives=18)
-    card = AdjustedValueCard(
+    card = Card(
         color=Color.BLUE,
         value=5,
-        consumption_value=3,
-        comparison_value=5,
+        custom_consumption_value=3,
     )
 
     damage = calculate_base_damage(
@@ -236,11 +240,10 @@ def test_round_critical_assignment_uses_comparison_value():
         PlayerState(player_id=2, color=Color.RED, lives=12),
     ]
     selected_cards = {
-        1: AdjustedValueCard(
+        1: Card(
             color=Color.BLUE,
             value=1,
-            consumption_value=1,
-            comparison_value=5,
+            custom_comparison_value=5,
         ),
         2: Card(color=Color.RED, value=3),
     }
@@ -263,11 +266,10 @@ def test_round_base_damage_uses_consumption_value():
         PlayerState(player_id=2, color=Color.RED, lives=12),
     ]
     selected_cards = {
-        1: AdjustedValueCard(
+        1: Card(
             color=Color.BLUE,
             value=5,
-            consumption_value=2,
-            comparison_value=5,
+            custom_consumption_value=2,
         ),
         2: Card(color=Color.RED, value=1),
     }

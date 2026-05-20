@@ -27,17 +27,23 @@ class Card:
 
     color: Color
     value: int
+    custom_consumption_value: int | None = None
+    custom_comparison_value: int | None = None
 
     @property
     def consumption_value(self) -> int:
         """Value used for life/scorte consumption when this card is resolved."""
 
+        if self.custom_consumption_value is not None:
+            return self.custom_consumption_value
         return self.value
 
     @property
     def comparison_value(self) -> int:
         """Value used to determine who receives a critical wound/Affamato."""
 
+        if self.custom_comparison_value is not None:
+            return self.custom_comparison_value
         return self.value
 
 

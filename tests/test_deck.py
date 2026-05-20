@@ -42,3 +42,12 @@ def test_each_color_has_all_values():
     }
 
     assert values_by_color == {color: set(CARD_VALUES) for color in colors}
+
+
+def test_standard_deck_cards_use_printed_values_without_overrides():
+    deck = build_deck([Color.BLUE, Color.RED], CARD_VALUES)
+
+    assert all(card.custom_consumption_value is None for card in deck)
+    assert all(card.custom_comparison_value is None for card in deck)
+    assert all(card.consumption_value == card.value for card in deck)
+    assert all(card.comparison_value == card.value for card in deck)
