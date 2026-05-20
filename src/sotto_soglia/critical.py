@@ -36,10 +36,9 @@ V05_HUNGER_NEXT_ROUND_EFFECTS = {
     FIUTO_DA_DISPENSA,
     PANCIA_BRONTOLANTE,
     MORSO_DELLA_FAME,
-}
-V05_HUNGER_UNIMPLEMENTED_EFFECTS = {
     RESPIRO_CALMO,
 }
+V05_HUNGER_UNIMPLEMENTED_EFFECTS: set[str] = set()
 
 SONO_ANCORA_QUI_SINGLE_1 = "single_1"
 SONO_ANCORA_QUI_SINGLE_2 = "single_2"
@@ -287,6 +286,10 @@ def resolve_v05_hunger_effect(
         return 0
 
     if card_id == MORSO_DELLA_FAME:
+        player.active_critical_effects.append(card_id)
+        return 0
+
+    if card_id == RESPIRO_CALMO:
         player.active_critical_effects.append(card_id)
         return 0
 

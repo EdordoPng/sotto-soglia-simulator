@@ -40,9 +40,9 @@ from sotto_soglia.critical import (
     V05_HUNGER_CARD_NAMES,
     V05_HUNGER_DECK_PROFILE,
     V05_HUNGER_DECK_PROFILE_ID,
+    V05_HUNGER_UNIMPLEMENTED_EFFECTS,
     build_critical_deck,
     get_critical_deck_profile,
-    resolve_v05_hunger_effect,
     shuffle_critical_deck,
     validate_critical_deck_order,
 )
@@ -907,21 +907,90 @@ def test_morso_della_fame_is_not_applied_twice():
     ] == []
 
 
-def test_respiro_calmo_still_raises_clear_error():
-    player = PlayerState(player_id=1, color=Color.BLUE, lives=7)
+def test_respiro_calmo_registers_next_round_effect_without_immediate_scorte_change():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=10),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
 
-    with pytest.raises(NotImplementedError) as error_info:
-        resolve_v05_hunger_effect(
-            RESPIRO_CALMO,
-            player,
-            _v05_hunger_controlled_config(),
-        )
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[RESPIRO_CALMO],
+    )
 
-    assert "v0.5 hunger effect" in str(error_info.value)
-    assert "is not implemented yet" in str(error_info.value)
+    assert players[0].lives == 10
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == [RESPIRO_CALMO]
+    assert players[0].active_critical_effects == [RESPIRO_CALMO]
+    assert players[0].consumed_critical_effects == []
+
+    event = result.critical_events[0]
+    assert event.critical_card_id == RESPIRO_CALMO
+    assert event.critical_card_name == "Respiro Calmo"
+    assert event.timing == "next_round"
+    assert event.effect_triggered is False
+    assert event.life_delta_player == 0
+    assert event.life_delta_targets == {}
+    assert event.player_lives_after == 10
+    assert event.player_critical_wounds_after == 1
 
 
-def test_v05_hunger_profile_is_not_silently_used_in_runtime_before_effects_exist():
+def test_respiro_calmo_is_consumed_after_next_round_even_without_blocking():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[RESPIRO_CALMO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert players[0].lives == 8
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [RESPIRO_CALMO]
+
+
+def test_respiro_calmo_does_not_prevent_affamato_when_value_remains_lowest():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[RESPIRO_CALMO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.lowest_value == 1
+    assert result.critical_wound_players == [1]
+    assert players[0].critical_wounds == 1
+    assert players[0].lives == 12
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [RESPIRO_CALMO]
+
+
+def test_all_v05_hunger_effects_are_implemented():
+    assert V05_HUNGER_UNIMPLEMENTED_EFFECTS == set()
+
+
+def test_v05_hunger_profile_is_not_silently_used_in_runtime_without_explicit_link():
     config = GameConfig(
         critical_card_effects_enabled=True,
         critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,

@@ -6,6 +6,7 @@ The full game rules will be implemented incrementally in later phases.
 from collections.abc import Iterable, Mapping
 
 from sotto_soglia.config import GameConfig
+from sotto_soglia.critical import RESPIRO_CALMO
 from sotto_soglia.models import Card, EliminationReason, PlayerState
 
 
@@ -38,6 +39,26 @@ def find_lowest_value_cards(selected_cards: Mapping[int, Card]) -> set[int]:
     """Backward-compatible alias for lowest-value player ids."""
 
     return find_lowest_value_players(selected_cards)
+
+
+def apply_comparison_value_modifier(
+    comparison_value: int,
+    modifier: int,
+    target_active_effects: Iterable[str] | None = None,
+    caused_by_opponent: bool = False,
+) -> int:
+    """Apply a comparison-value modifier, respecting Respiro Calmo protection."""
+
+    active_effects = set(target_active_effects or [])
+    is_blocked_opponent_reduction = (
+        modifier < 0
+        and caused_by_opponent
+        and RESPIRO_CALMO in active_effects
+    )
+    if is_blocked_opponent_reduction:
+        return comparison_value
+
+    return comparison_value + modifier
 
 
 def calculate_base_damage(

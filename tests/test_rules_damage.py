@@ -8,9 +8,10 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
+from sotto_soglia.critical import RESPIRO_CALMO
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import resolve_round
-from sotto_soglia.rules import calculate_base_damage
+from sotto_soglia.rules import apply_comparison_value_modifier, calculate_base_damage
 
 
 def test_standard_card_uses_printed_value_for_consumption_and_comparison():
@@ -48,6 +49,42 @@ def test_card_with_both_value_overrides_uses_both():
     assert card.value == 4
     assert card.consumption_value == 2
     assert card.comparison_value == 5
+
+
+def test_respiro_calmo_blocks_opponent_comparison_value_reduction():
+    assert apply_comparison_value_modifier(
+        comparison_value=3,
+        modifier=-1,
+        target_active_effects=[RESPIRO_CALMO],
+        caused_by_opponent=True,
+    ) == 3
+
+
+def test_opponent_comparison_value_reduction_applies_without_respiro_calmo():
+    assert apply_comparison_value_modifier(
+        comparison_value=3,
+        modifier=-1,
+        target_active_effects=[],
+        caused_by_opponent=True,
+    ) == 2
+
+
+def test_respiro_calmo_does_not_block_comparison_value_increase():
+    assert apply_comparison_value_modifier(
+        comparison_value=3,
+        modifier=1,
+        target_active_effects=[RESPIRO_CALMO],
+        caused_by_opponent=True,
+    ) == 4
+
+
+def test_respiro_calmo_does_not_block_non_opponent_comparison_value_change():
+    assert apply_comparison_value_modifier(
+        comparison_value=3,
+        modifier=-1,
+        target_active_effects=[RESPIRO_CALMO],
+        caused_by_opponent=False,
+    ) == 2
 
 
 def test_single_lowest_value_gets_critical_and_other_player_loses_card_value():
