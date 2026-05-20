@@ -372,10 +372,133 @@ def test_razione_risparmiata_is_not_applied_twice():
     assert players[0].consumed_critical_effects == [RAZIONE_RISPARMIATA]
 
 
+def test_fiuto_da_dispensa_registers_next_round_effect_without_immediate_scorte_change():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=10),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[FIUTO_DA_DISPENSA],
+    )
+
+    assert players[0].lives == 10
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == [FIUTO_DA_DISPENSA]
+    assert players[0].active_critical_effects == [FIUTO_DA_DISPENSA]
+
+    event = result.critical_events[0]
+    assert event.critical_card_id == FIUTO_DA_DISPENSA
+    assert event.critical_card_name == "Fiuto da Dispensa"
+    assert event.timing == "next_round"
+    assert event.effect_triggered is False
+    assert event.life_delta_player == 0
+    assert event.player_lives_after == 10
+    assert event.player_critical_wounds_after == 1
+
+
+def test_fiuto_da_dispensa_deals_four_cards_next_round_and_is_consumed():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[FIUTO_DA_DISPENSA],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    config = _v05_hunger_controlled_config()
+    active_effects = {1: [FIUTO_DA_DISPENSA]}
+
+    hand_sizes, preliminary_events = _hand_sizes_from_critical_effects(
+        players,
+        config,
+        active_effects,
+        game_id=1,
+        round_number=2,
+    )
+
+    assert hand_sizes == {1: 4}
+    assert [event.critical_card_id for event in preliminary_events] == [
+        FIUTO_DA_DISPENSA
+    ]
+    assert preliminary_events[0].effect_triggered is True
+
+    resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        config,
+        critical_deck=[],
+        critical_effects_snapshot=active_effects,
+        preliminary_critical_events=preliminary_events,
+    )
+
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [FIUTO_DA_DISPENSA]
+
+    next_hand_sizes, next_events = _hand_sizes_from_critical_effects(
+        players,
+        config,
+        {},
+        game_id=1,
+        round_number=3,
+    )
+
+    assert next_hand_sizes == {}
+    assert next_events == []
+
+
+def test_fiuto_da_dispensa_and_razione_risparmiata_do_not_interfere():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[FIUTO_DA_DISPENSA, RAZIONE_RISPARMIATA],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    config = _v05_hunger_controlled_config()
+    active_effects = {1: [FIUTO_DA_DISPENSA, RAZIONE_RISPARMIATA]}
+
+    hand_sizes, preliminary_events = _hand_sizes_from_critical_effects(
+        players,
+        config,
+        active_effects,
+        game_id=1,
+        round_number=2,
+    )
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        config,
+        critical_deck=[],
+        critical_effects_snapshot=active_effects,
+        preliminary_critical_events=preliminary_events,
+    )
+
+    assert hand_sizes == {1: 4}
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 9
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [
+        FIUTO_DA_DISPENSA,
+        RAZIONE_RISPARMIATA,
+    ]
+    assert {
+        event.critical_card_id
+        for event in result.critical_events
+        if event.player_id == 1
+    } >= {FIUTO_DA_DISPENSA, RAZIONE_RISPARMIATA}
+
+
 @pytest.mark.parametrize(
     "card_id",
     [
-        FIUTO_DA_DISPENSA,
         PANCIA_BRONTOLANTE,
         MORSO_DELLA_FAME,
         RESPIRO_CALMO,

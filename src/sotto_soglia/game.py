@@ -6,6 +6,7 @@ from random import Random
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
+    FIUTO_DA_DISPENSA,
     LEGACY_CRITICAL_DECK_PROFILE_ID,
     MANO_LUCIDA,
     MANO_TREMANTE,
@@ -163,7 +164,7 @@ def _hand_sizes_from_critical_effects(
     game_id: int,
     round_number: int,
 ) -> tuple[dict[int, int], list[CriticalCardEvent]]:
-    """Return per-player hand sizes and events from Mano Lucida/Tremante."""
+    """Return per-player hand sizes and events from active next-round effects."""
 
     hand_sizes: dict[int, int] = {}
     events: list[CriticalCardEvent] = []
@@ -181,6 +182,9 @@ def _hand_sizes_from_critical_effects(
             hand_size = 2
         elif MANO_LUCIDA in active_effects:
             card_id = MANO_LUCIDA
+            hand_size = 4
+        elif FIUTO_DA_DISPENSA in active_effects:
+            card_id = FIUTO_DA_DISPENSA
             hand_size = 4
 
         if card_id is None:
