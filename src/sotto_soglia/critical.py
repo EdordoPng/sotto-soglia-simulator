@@ -3,6 +3,12 @@
 from dataclasses import dataclass, field
 from collections.abc import Mapping
 from random import Random
+from typing import TYPE_CHECKING
+
+from sotto_soglia.models import PlayerState
+
+if TYPE_CHECKING:
+    from sotto_soglia.config import GameConfig
 
 
 LEGACY_CRITICAL_DECK_PROFILE_ID = "legacy"
@@ -23,6 +29,15 @@ FIUTO_DA_DISPENSA = "fiuto_da_dispensa"
 PANCIA_BRONTOLANTE = "pancia_brontolante"
 MORSO_DELLA_FAME = "morso_della_fame"
 RESPIRO_CALMO = "respiro_calmo"
+
+V05_HUNGER_IMMEDIATE_EFFECTS = {BRICIOLA_NASCOSTA}
+V05_HUNGER_UNIMPLEMENTED_EFFECTS = {
+    RAZIONE_RISPARMIATA,
+    FIUTO_DA_DISPENSA,
+    PANCIA_BRONTOLANTE,
+    MORSO_DELLA_FAME,
+    RESPIRO_CALMO,
+}
 
 SONO_ANCORA_QUI_SINGLE_1 = "single_1"
 SONO_ANCORA_QUI_SINGLE_2 = "single_2"
@@ -217,10 +232,44 @@ def validate_critical_deck_order(order: str | list[str] | tuple[str, ...]) -> tu
 def critical_card_name(card_id: str) -> str:
     """Return the printable name for a critical wound card id."""
 
-    return CRITICAL_CARD_NAMES[card_id]
+    if card_id in CRITICAL_CARD_NAMES:
+        return CRITICAL_CARD_NAMES[card_id]
+    return V05_HUNGER_CARD_NAMES[card_id]
 
 
 def critical_card_timing(card_id: str) -> str:
     """Return the timing label for a critical wound card id."""
 
-    return "immediate" if card_id in IMMEDIATE_EFFECTS else "next_round"
+    if card_id in IMMEDIATE_EFFECTS or card_id in V05_HUNGER_IMMEDIATE_EFFECTS:
+        return "immediate"
+    return "next_round"
+
+
+def resolve_v05_hunger_effect(
+    card_id: str,
+    player: PlayerState,
+    config: "GameConfig",
+) -> int:
+    """Apply one implemented v0.5 hunger effect and return the player's life delta.
+
+    The legacy ``lives`` field represents Scorte for the v0.5 transition, and
+    ``critical_wounds`` represents Affamato cards already received.
+    """
+
+    if card_id not in V05_HUNGER_CARD_IDS:
+        raise ValueError(f"Unknown v0.5 hunger effect '{card_id}'")
+
+    if card_id in V05_HUNGER_UNIMPLEMENTED_EFFECTS:
+        raise NotImplementedError(
+            f"v0.5 hunger effect '{V05_HUNGER_CARD_NAMES[card_id]}' "
+            f"({card_id}) is not implemented yet."
+        )
+
+    if card_id == BRICIOLA_NASCOSTA:
+        before = player.lives
+        player.lives = min(config.initial_lives, player.lives + 1)
+        life_delta = player.lives - before
+        player.life_gained_from_critical_cards += life_delta
+        return life_delta
+
+    raise NotImplementedError(f"v0.5 hunger effect '{card_id}' is not implemented yet.")

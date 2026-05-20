@@ -14,9 +14,11 @@ from sotto_soglia.critical import (
     SONO_ANCORA_QUI,
     SONO_ANCORA_QUI_SINGLE_2,
     SONO_ANCORA_QUI_UP_TO_2_TARGETS,
+    V05_HUNGER_CARD_IDS,
     CriticalCardEvent,
     critical_card_name,
     critical_card_timing,
+    resolve_v05_hunger_effect,
 )
 from sotto_soglia.models import Card
 from sotto_soglia.models import PlayerState
@@ -258,7 +260,11 @@ def _draw_and_apply_critical_card(
     life_delta_targets: dict[int, int] = {}
     effect_triggered = card_id in (BENDAGGIO_EMERGENZA, SONO_ANCORA_QUI)
 
-    if card_id == BENDAGGIO_EMERGENZA:
+    if card_id in V05_HUNGER_CARD_IDS:
+        life_delta_player = resolve_v05_hunger_effect(card_id, player, config)
+        critical_life_delta_by_player[player_id] += life_delta_player
+        effect_triggered = True
+    elif card_id == BENDAGGIO_EMERGENZA:
         before = player.lives
         player.lives = min(config.initial_lives, player.lives + 1)
         life_delta_player = player.lives - before

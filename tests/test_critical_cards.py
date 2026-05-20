@@ -42,6 +42,7 @@ from sotto_soglia.critical import (
     V05_HUNGER_DECK_PROFILE_ID,
     build_critical_deck,
     get_critical_deck_profile,
+    resolve_v05_hunger_effect,
     shuffle_critical_deck,
     validate_critical_deck_order,
 )
@@ -66,6 +67,16 @@ def _critical_config(deck_order=None, sono_variant="single_2"):
         critical_card_effects_enabled=True,
         critical_deck_order=tuple(deck_order) if deck_order else None,
         sono_ancora_qui_variant=sono_variant,
+    )
+
+
+def _v05_hunger_controlled_config():
+    return GameConfig(
+        initial_lives=12,
+        critical_wounds_limit=5,
+        color_effects_enabled=False,
+        critical_card_effects_enabled=True,
+        critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
     )
 
 
@@ -149,6 +160,75 @@ def test_v05_hunger_deck_shuffle_is_reproducible_with_seed():
     assert first == second
     assert first != different_seed
     assert Counter(first) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
+
+
+def test_briciola_nascosta_recovers_one_scorta_in_controlled_round():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=7),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[BRICIOLA_NASCOSTA],
+    )
+
+    assert players[0].lives == 8
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == [BRICIOLA_NASCOSTA]
+    assert players[0].life_gained_from_critical_cards == 1
+    assert result.critical_life_delta_by_player[1] == 1
+
+    event = result.critical_events[0]
+    assert event.critical_card_id == BRICIOLA_NASCOSTA
+    assert event.critical_card_name == "Briciola Nascosta"
+    assert event.timing == "immediate"
+    assert event.effect_triggered is True
+    assert event.life_delta_player == 1
+    assert event.player_lives_after == 8
+    assert event.player_critical_wounds_after == 1
+
+
+def test_briciola_nascosta_does_not_exceed_initial_scorte():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[BRICIOLA_NASCOSTA],
+    )
+
+    assert players[0].lives == 12
+    assert players[0].critical_wounds == 1
+    assert players[0].life_gained_from_critical_cards == 0
+    assert result.critical_events[0].life_delta_player == 0
+    assert result.critical_events[0].player_critical_wounds_after == 1
+
+
+@pytest.mark.parametrize(
+    "card_id",
+    [
+        RAZIONE_RISPARMIATA,
+        FIUTO_DA_DISPENSA,
+        PANCIA_BRONTOLANTE,
+        MORSO_DELLA_FAME,
+        RESPIRO_CALMO,
+    ],
+)
+def test_unimplemented_v05_hunger_effects_raise_clear_error(card_id):
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=7)
+
+    with pytest.raises(NotImplementedError) as error_info:
+        resolve_v05_hunger_effect(card_id, player, _v05_hunger_controlled_config())
+
+    assert "v0.5 hunger effect" in str(error_info.value)
+    assert "is not implemented yet" in str(error_info.value)
 
 
 def test_v05_hunger_profile_is_not_silently_used_in_runtime_before_effects_exist():
