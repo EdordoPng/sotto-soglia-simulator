@@ -1,6 +1,25 @@
 """Configuration defaults for the Sotto Soglia simulator."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+
+
+V05_PLAYER_PRESETS = {
+    2: {
+        "initial_lives": 12,
+        "critical_wounds_limit": 5,
+        "color_effects_enabled": False,
+    },
+    3: {
+        "initial_lives": 17,
+        "critical_wounds_limit": 4,
+        "color_effects_enabled": False,
+    },
+    4: {
+        "initial_lives": 24,
+        "critical_wounds_limit": 4,
+        "color_effects_enabled": False,
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -18,3 +37,26 @@ class GameConfig:
     critical_deck_seed: int | None = None
     critical_deck_order: tuple[str, ...] | None = None
     sono_ancora_qui_variant: str = "single_2"
+
+
+def get_v05_config_for_players(
+    players_count: int,
+    base_config: GameConfig | None = None,
+) -> GameConfig:
+    """Return the v0.5 numeric preset for the given player count.
+
+    The legacy field names are intentionally preserved in this step:
+    initial_lives means Scorte, critical_wounds_limit means the Affamato limit.
+    """
+
+    if players_count not in V05_PLAYER_PRESETS:
+        valid_counts = ", ".join(str(count) for count in sorted(V05_PLAYER_PRESETS))
+        raise ValueError(f"players_count must be one of: {valid_counts}")
+
+    preset = V05_PLAYER_PRESETS[players_count]
+    return replace(
+        base_config or GameConfig(),
+        initial_lives=preset["initial_lives"],
+        critical_wounds_limit=preset["critical_wounds_limit"],
+        color_effects_enabled=preset["color_effects_enabled"],
+    )

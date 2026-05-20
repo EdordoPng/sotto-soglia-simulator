@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.game import GameResult, play_game
 from sotto_soglia.statistics import StatisticAggregator
 from sotto_soglia.strategies import BaseStrategy
@@ -42,7 +42,7 @@ class SimulationRunner:
     ) -> SimulationResult:
         """Run many games using incrementing deterministic seeds."""
 
-        config = config or GameConfig()
+        config = config or get_v05_config_for_players(players_count)
         if players_count < config.min_players or players_count > config.max_players:
             raise ValueError(
                 f"players_count must be between {config.min_players} and {config.max_players}"

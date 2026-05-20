@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from itertools import permutations
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.simulation import SimulationResult, SimulationRunner
 from sotto_soglia.statistics import StatisticAggregator
 from sotto_soglia.strategies import create_strategy
@@ -47,7 +47,7 @@ class StrategyTournamentRunner:
     ) -> StrategyTournamentResult:
         """Run a counterbalanced tournament for the provided strategies."""
 
-        config = config or GameConfig()
+        config = config or get_v05_config_for_players(players_count)
         if players_count < config.min_players or players_count > config.max_players:
             raise ValueError(
                 f"players_count must be between {config.min_players} and {config.max_players}"

@@ -12,7 +12,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
     COLPO_DI_CODA,
@@ -869,7 +869,7 @@ def test_cli_exports_sono_ancora_qui_variant_and_critical_damage(tmp_path):
     assert stats["critical_card_stats"][SONO_ANCORA_QUI]["total_life_delta"] < 0
 
 
-def test_cli_without_final_config_flags_keeps_default_config(tmp_path):
+def test_cli_without_final_config_flags_uses_v05_player_preset(tmp_path):
     subprocess.run(
         [
             sys.executable,
@@ -894,8 +894,10 @@ def test_cli_without_final_config_flags_keeps_default_config(tmp_path):
     with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
         config = json.load(file)
 
-    assert config["initial_lives"] == GameConfig().initial_lives
-    assert config["critical_wounds_limit"] == GameConfig().critical_wounds_limit
+    preset = get_v05_config_for_players(2)
+    assert config["initial_lives"] == preset.initial_lives
+    assert config["critical_wounds_limit"] == preset.critical_wounds_limit
+    assert config["color_effects_enabled"] is False
 
 
 def test_cli_final_config_flags_for_two_players_are_exported(tmp_path):

@@ -1,8 +1,9 @@
 """Command-line interface for the Sotto Soglia simulator."""
 
 import argparse
+from dataclasses import replace
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import SONO_ANCORA_QUI_VARIANTS, validate_critical_deck_order
 from sotto_soglia.exporters import (
     export_parametric_simulation_result,
@@ -224,6 +225,7 @@ def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
         if args.critical_deck_order
         else None
     )
+    config = get_v05_config_for_players(args.players)
     config_values = {
         "critical_card_effects_enabled": parse_on_off(
             args.critical_card_effects,
@@ -242,7 +244,7 @@ def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
             raise ValueError("--critical-wounds-max must be greater than 0")
         config_values["critical_wounds_limit"] = args.critical_wounds_max
 
-    return GameConfig(**config_values)
+    return replace(config, **config_values)
 
 
 def main() -> None:

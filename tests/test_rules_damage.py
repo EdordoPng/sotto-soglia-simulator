@@ -7,7 +7,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import resolve_round
 from sotto_soglia.rules import calculate_base_damage
@@ -131,3 +131,49 @@ def test_critical_wound_player_does_not_activate_color_effect():
     assert result.critical_wound_players == [2]
     assert result.extra_damage_by_player[1] == 0
     assert players[0].lives == 15
+
+
+def test_v05_own_color_does_not_reduce_base_damage():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(color=Color.BLUE, value=4),
+        2: Card(color=Color.YELLOW, value=2),
+    }
+
+    result = resolve_round(
+        players,
+        selected_cards,
+        get_v05_config_for_players(2),
+    )
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 4
+    assert result.extra_damage_by_player[1] == 0
+    assert players[0].lives == 8
+
+
+def test_v05_opponent_color_does_not_add_extra_damage():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=17),
+        PlayerState(player_id=2, color=Color.RED, lives=17),
+        PlayerState(player_id=3, color=Color.GREEN, lives=17),
+    ]
+    selected_cards = {
+        1: Card(color=Color.GREEN, value=3),
+        2: Card(color=Color.BLUE, value=4),
+        3: Card(color=Color.YELLOW, value=1),
+    }
+
+    result = resolve_round(
+        players,
+        selected_cards,
+        get_v05_config_for_players(3),
+    )
+
+    assert result.critical_wound_players == [3]
+    assert result.extra_damage_by_player[1] == 0
+    assert result.total_damage_by_player[1] == 3
+    assert players[0].lives == 14

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 from random import Random
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     MANO_LUCIDA,
     MANO_TREMANTE,
@@ -240,7 +240,7 @@ def play_game(
 ) -> GameResult:
     """Play one complete game using the existing single-round resolver."""
 
-    config = config or GameConfig()
+    config = config or get_v05_config_for_players(players_count)
     players = create_players(players_count, config)
     strategy_by_player = _normalize_strategies(strategies, players)
     for player in players:
