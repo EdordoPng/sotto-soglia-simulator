@@ -35,9 +35,9 @@ V05_HUNGER_NEXT_ROUND_EFFECTS = {
     RAZIONE_RISPARMIATA,
     FIUTO_DA_DISPENSA,
     PANCIA_BRONTOLANTE,
+    MORSO_DELLA_FAME,
 }
 V05_HUNGER_UNIMPLEMENTED_EFFECTS = {
-    MORSO_DELLA_FAME,
     RESPIRO_CALMO,
 }
 
@@ -283,6 +283,10 @@ def resolve_v05_hunger_effect(
         return 0
 
     if card_id == PANCIA_BRONTOLANTE:
+        player.active_critical_effects.append(card_id)
+        return 0
+
+    if card_id == MORSO_DELLA_FAME:
         player.active_critical_effects.append(card_id)
         return 0
 

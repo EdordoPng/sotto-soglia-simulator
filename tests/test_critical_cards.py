@@ -636,18 +636,286 @@ def test_v05_hunger_hand_size_is_clamped_between_two_and_four_cards():
     ]
 
 
-@pytest.mark.parametrize(
-    "card_id",
-    [
-        MORSO_DELLA_FAME,
-        RESPIRO_CALMO,
-    ],
-)
-def test_unimplemented_v05_hunger_effects_raise_clear_error(card_id):
+def test_morso_della_fame_registers_next_round_effect_without_immediate_scorte_change():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=10),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[MORSO_DELLA_FAME],
+    )
+
+    assert players[0].lives == 10
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == [MORSO_DELLA_FAME]
+    assert players[0].active_critical_effects == [MORSO_DELLA_FAME]
+
+    event = result.critical_events[0]
+    assert event.critical_card_id == MORSO_DELLA_FAME
+    assert event.critical_card_name == "Morso della Fame"
+    assert event.timing == "next_round"
+    assert event.effect_triggered is False
+    assert event.life_delta_player == 0
+    assert event.life_delta_targets == {}
+    assert event.player_lives_after == 10
+    assert event.player_critical_wounds_after == 1
+
+
+def test_morso_della_fame_triggers_on_next_affamato_and_damages_valid_opponent():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4, custom_consumption_value=1),
+            3: Card(Color.GREEN, 5, custom_consumption_value=1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[1] == 0
+    assert players[0].lives == 12
+    assert players[1].lives == 9
+    assert players[2].lives == 11
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [MORSO_DELLA_FAME]
+
+    morso_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ][0]
+    assert morso_event.effect_triggered is True
+    assert morso_event.target_player_id == 2
+    assert morso_event.life_delta_targets == {2: -2}
+
+
+def test_morso_della_fame_consumes_without_damage_when_no_next_affamato():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 4), 2: Card(Color.RED, 1)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.critical_wound_players == [2]
+    assert players[0].lives == 8
+    assert players[1].lives == 12
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [MORSO_DELLA_FAME]
+    assert [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ] == []
+
+
+def test_morso_della_fame_has_no_effect_without_valid_targets_and_is_consumed():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 1)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.critical_wound_players == [1, 2]
+    assert players[0].lives == 12
+    assert players[1].lives == 12
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [MORSO_DELLA_FAME]
+
+    morso_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ][0]
+    assert morso_event.effect_triggered is False
+    assert morso_event.target_player_id is None
+    assert morso_event.life_delta_targets == {}
+
+
+def test_morso_della_fame_does_not_reduce_lives_below_zero():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=2),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4, custom_consumption_value=1),
+            3: Card(Color.GREEN, 5, custom_consumption_value=1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    morso_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ][0]
+    assert players[1].lives == 0
+    assert morso_event.target_player_id == 2
+    assert morso_event.life_delta_targets == {2: -1}
+
+
+def test_morso_della_fame_does_not_target_players_who_received_affamato_this_round():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 1),
+            3: Card(Color.GREEN, 5, custom_consumption_value=1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    morso_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ][0]
+    assert result.critical_wound_players == [1, 2]
+    assert players[1].lives == 12
+    assert players[2].lives == 9
+    assert morso_event.target_player_id == 3
+    assert morso_event.life_delta_targets == {3: -2}
+
+
+def test_morso_della_fame_does_not_target_self():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12, is_alive=False),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    morso_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ][0]
+    assert players[0].lives == 12
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [MORSO_DELLA_FAME]
+    assert morso_event.effect_triggered is False
+    assert morso_event.target_player_id is None
+
+
+def test_morso_della_fame_is_not_applied_twice():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    config = _v05_hunger_controlled_config()
+
+    first_result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4, custom_consumption_value=1),
+        },
+        config,
+        critical_deck=[],
+    )
+    second_result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4, custom_consumption_value=1),
+        },
+        config,
+        critical_deck=[],
+    )
+
+    assert players[1].lives == 8
+    assert players[0].active_critical_effects == []
+    assert players[0].consumed_critical_effects == [MORSO_DELLA_FAME]
+    first_morso_events = [
+        event for event in first_result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ]
+    assert len(first_morso_events) == 1
+    assert [
+        event for event in second_result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ] == []
+
+
+def test_respiro_calmo_still_raises_clear_error():
     player = PlayerState(player_id=1, color=Color.BLUE, lives=7)
 
     with pytest.raises(NotImplementedError) as error_info:
-        resolve_v05_hunger_effect(card_id, player, _v05_hunger_controlled_config())
+        resolve_v05_hunger_effect(
+            RESPIRO_CALMO,
+            player,
+            _v05_hunger_controlled_config(),
+        )
 
     assert "v0.5 hunger effect" in str(error_info.value)
     assert "is not implemented yet" in str(error_info.value)

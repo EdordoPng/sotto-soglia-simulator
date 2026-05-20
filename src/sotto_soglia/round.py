@@ -9,6 +9,7 @@ from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
     COLPO_DI_CODA,
     FERITA_ESPOSTA,
+    MORSO_DELLA_FAME,
     RAZIONE_RISPARMIATA,
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
@@ -192,6 +193,18 @@ def resolve_round(
             game_id=game_id,
             round_number=round_number,
         )
+        _apply_morso_della_fame(
+            player_map=player_map,
+            critical_wound_player_ids=critical_wound_player_ids,
+            active_effects_by_player=active_effects_by_player,
+            strategies=strategies or {},
+            rng=rng,
+            game_state=game_state,
+            critical_events=critical_events,
+            critical_life_delta_by_player=critical_life_delta_by_player,
+            game_id=game_id,
+            round_number=round_number,
+        )
 
     for player_id, prevented_damage in prevented_damage_by_player.items():
         player_map[player_id].damage_prevented_by_critical_cards += prevented_damage
@@ -360,6 +373,47 @@ def _choose_sono_ancora_qui_targets(
     return selected_targets
 
 
+def _valid_nonimmune_opponent_targets(
+    player_map: Mapping[int, PlayerState],
+    source_id: int,
+    critical_wound_player_ids: set[int],
+) -> list[PlayerState]:
+    """Return opponents that can receive next-round critical effect damage."""
+
+    return [
+        target
+        for target in player_map.values()
+        if target.player_id != source_id
+        and target.is_alive
+        and target.player_id not in critical_wound_player_ids
+    ]
+
+
+def _choose_single_critical_effect_target(
+    source: PlayerState,
+    effect_id: str,
+    valid_targets: list[PlayerState],
+    strategy: BaseStrategy | None,
+    rng: Random,
+    game_state: dict | None,
+) -> PlayerState | None:
+    """Choose one valid target for a critical-card effect."""
+
+    if strategy is None:
+        return choose_fallback_critical_effect_target(valid_targets)
+
+    target = strategy.choose_critical_effect_target(
+        game_state,
+        source,
+        effect_id,
+        valid_targets,
+        rng,
+    )
+    if target not in valid_targets:
+        target = choose_fallback_critical_effect_target(valid_targets)
+    return target
+
+
 def _calculate_base_damage_with_critical_effects(
     player: PlayerState,
     card: Card,
@@ -519,26 +573,19 @@ def _apply_colpo_di_coda(
         if COLPO_DI_CODA not in active_effects_by_player.get(source_id, []):
             continue
 
-        valid_targets = [
-            target
-            for target in player_map.values()
-            if target.player_id != source_id
-            and target.is_alive
-            and target.player_id not in critical_wound_player_ids
-        ]
-        strategy = strategies.get(source_id)
-        if strategy is None:
-            target = choose_fallback_critical_effect_target(valid_targets)
-        else:
-            target = strategy.choose_critical_effect_target(
-                game_state,
-                source,
-                COLPO_DI_CODA,
-                valid_targets,
-                rng,
-            )
-            if target not in valid_targets:
-                target = choose_fallback_critical_effect_target(valid_targets)
+        valid_targets = _valid_nonimmune_opponent_targets(
+            player_map,
+            source_id,
+            critical_wound_player_ids,
+        )
+        target = _choose_single_critical_effect_target(
+            source,
+            COLPO_DI_CODA,
+            valid_targets,
+            strategies.get(source_id),
+            rng,
+            game_state,
+        )
 
         life_delta_targets = {}
         target_player_id = None
@@ -561,6 +608,70 @@ def _apply_colpo_di_coda(
                 player_id=source_id,
                 critical_card_id=COLPO_DI_CODA,
                 critical_card_name=critical_card_name(COLPO_DI_CODA),
+                timing="next_round",
+                effect_triggered=triggered,
+                target_player_id=target_player_id,
+                life_delta_targets=life_delta_targets,
+                player_lives_after=source.lives,
+                player_critical_wounds_after=source.critical_wounds,
+            )
+        )
+
+
+def _apply_morso_della_fame(
+    player_map: dict[int, PlayerState],
+    critical_wound_player_ids: set[int],
+    active_effects_by_player: Mapping[int, list[str]],
+    strategies: Mapping[int, BaseStrategy],
+    rng: Random,
+    game_state: dict | None,
+    critical_events: list[CriticalCardEvent],
+    critical_life_delta_by_player: dict[int, int],
+    game_id: int,
+    round_number: int,
+) -> None:
+    """Apply Morso della Fame after normal round damage."""
+
+    for source_id in sorted(critical_wound_player_ids):
+        source = player_map[source_id]
+        if MORSO_DELLA_FAME not in active_effects_by_player.get(source_id, []):
+            continue
+
+        valid_targets = _valid_nonimmune_opponent_targets(
+            player_map,
+            source_id,
+            critical_wound_player_ids,
+        )
+        target = _choose_single_critical_effect_target(
+            source,
+            MORSO_DELLA_FAME,
+            valid_targets,
+            strategies.get(source_id),
+            rng,
+            game_state,
+        )
+
+        life_delta_targets = {}
+        target_player_id = None
+        triggered = target is not None
+        if target is not None:
+            target_player_id = target.player_id
+            before = target.lives
+            apply_life_loss(target, 2)
+            delta = target.lives - before
+            if delta:
+                target.life_lost_from_critical_cards += -delta
+                critical_life_delta_by_player[target.player_id] += delta
+                life_delta_targets[target.player_id] = delta
+
+        critical_events.append(
+            CriticalCardEvent(
+                game_id=game_id,
+                round_number=round_number,
+                draw_order=None,
+                player_id=source_id,
+                critical_card_id=MORSO_DELLA_FAME,
+                critical_card_name=critical_card_name(MORSO_DELLA_FAME),
                 timing="next_round",
                 effect_triggered=triggered,
                 target_player_id=target_player_id,
