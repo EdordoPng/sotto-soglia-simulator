@@ -10,6 +10,7 @@ from sotto_soglia.critical import (
     LEGACY_CRITICAL_DECK_PROFILE_ID,
     MANO_LUCIDA,
     MANO_TREMANTE,
+    PANCIA_BRONTOLANTE,
     CriticalCardEvent,
     build_critical_deck,
     critical_card_name,
@@ -175,38 +176,76 @@ def _hand_sizes_from_critical_effects(
         if not player.is_alive:
             continue
         active_effects = active_effects_by_player.get(player.player_id, [])
-        card_id = None
-        hand_size = config.cards_per_player
         if MANO_TREMANTE in active_effects:
-            card_id = MANO_TREMANTE
-            hand_size = 2
+            hand_sizes[player.player_id] = 2
+            events.append(
+                _hand_size_event(
+                    player=player,
+                    card_id=MANO_TREMANTE,
+                    game_id=game_id,
+                    round_number=round_number,
+                )
+            )
+            continue
         elif MANO_LUCIDA in active_effects:
-            card_id = MANO_LUCIDA
-            hand_size = 4
-        elif FIUTO_DA_DISPENSA in active_effects:
-            card_id = FIUTO_DA_DISPENSA
-            hand_size = 4
-
-        if card_id is None:
+            hand_sizes[player.player_id] = 4
+            events.append(
+                _hand_size_event(
+                    player=player,
+                    card_id=MANO_LUCIDA,
+                    game_id=game_id,
+                    round_number=round_number,
+                )
+            )
             continue
 
-        hand_sizes[player.player_id] = hand_size
-        events.append(
-            CriticalCardEvent(
+        hand_effects = [
+            effect_id
+            for effect_id in active_effects
+            if effect_id in (FIUTO_DA_DISPENSA, PANCIA_BRONTOLANTE)
+        ]
+        if not hand_effects:
+            continue
+
+        hand_size_delta = active_effects.count(FIUTO_DA_DISPENSA)
+        hand_size_delta -= active_effects.count(PANCIA_BRONTOLANTE)
+        hand_sizes[player.player_id] = min(
+            4,
+            max(2, config.cards_per_player + hand_size_delta),
+        )
+        events.extend(
+            _hand_size_event(
+                player=player,
+                card_id=effect_id,
                 game_id=game_id,
                 round_number=round_number,
-                draw_order=None,
-                player_id=player.player_id,
-                critical_card_id=card_id,
-                critical_card_name=critical_card_name(card_id),
-                timing="next_round",
-                effect_triggered=True,
-                player_lives_after=player.lives,
-                player_critical_wounds_after=player.critical_wounds,
             )
+            for effect_id in hand_effects
         )
 
     return hand_sizes, events
+
+
+def _hand_size_event(
+    player: PlayerState,
+    card_id: str,
+    game_id: int,
+    round_number: int,
+) -> CriticalCardEvent:
+    """Build a next-round event for an effect that changes dealt hand size."""
+
+    return CriticalCardEvent(
+        game_id=game_id,
+        round_number=round_number,
+        draw_order=None,
+        player_id=player.player_id,
+        critical_card_id=card_id,
+        critical_card_name=critical_card_name(card_id),
+        timing="next_round",
+        effect_triggered=True,
+        player_lives_after=player.lives,
+        player_critical_wounds_after=player.critical_wounds,
+    )
 
 
 def resolve_game_tiebreaker(
