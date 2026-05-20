@@ -28,6 +28,18 @@ class Card:
     color: Color
     value: int
 
+    @property
+    def consumption_value(self) -> int:
+        """Value used for life/scorte consumption when this card is resolved."""
+
+        return self.value
+
+    @property
+    def comparison_value(self) -> int:
+        """Value used to determine who receives a critical wound/Affamato."""
+
+        return self.value
+
 
 @dataclass
 class PlayerState:

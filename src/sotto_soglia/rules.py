@@ -21,16 +21,16 @@ def _players_by_id(players: PlayerCollection) -> dict[int, PlayerState]:
 
 
 def find_lowest_value_players(selected_cards: Mapping[int, Card]) -> set[int]:
-    """Return player ids that played the lowest revealed card value."""
+    """Return player ids that played the lowest comparison value."""
 
     if not selected_cards:
         return set()
 
-    lowest_value = min(card.value for card in selected_cards.values())
+    lowest_value = min(card.comparison_value for card in selected_cards.values())
     return {
         player_id
         for player_id, card in selected_cards.items()
-        if card.value == lowest_value
+        if card.comparison_value == lowest_value
     }
 
 
@@ -51,7 +51,7 @@ def calculate_base_damage(
     if received_critical_wound:
         return 0
 
-    damage = card.value
+    damage = card.consumption_value
     if color_effects_enabled and card.color == player.color:
         damage -= 1
 

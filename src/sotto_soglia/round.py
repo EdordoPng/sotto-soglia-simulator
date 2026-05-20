@@ -112,7 +112,10 @@ def resolve_round(
     critical_life_delta_by_player = {player_id: 0 for player_id in player_map}
 
     critical_wound_player_ids = find_lowest_value_players(selected_cards)
-    lowest_value = min((card.value for card in selected_cards.values()), default=None)
+    lowest_value = min(
+        (card.comparison_value for card in selected_cards.values()),
+        default=None,
+    )
 
     critical_draw_order = [
         player_id
@@ -364,7 +367,7 @@ def _calculate_base_damage_with_critical_effects(
     if received_critical_wound:
         return 0
 
-    damage = card.value
+    damage = card.consumption_value
     reduction = 0
     if color_effects_enabled and card.color == player.color:
         reduction = 2 if SANGUE_FREDDO in active_effects else 1
