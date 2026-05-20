@@ -1,8 +1,12 @@
 """Critical wound card definitions and helpers."""
 
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from random import Random
 
+
+LEGACY_CRITICAL_DECK_PROFILE_ID = "legacy_critical_wounds"
+V05_HUNGER_DECK_PROFILE_ID = "v05_hunger"
 
 BENDAGGIO_EMERGENZA = "bendaggio_emergenza"
 SANGUE_FREDDO = "sangue_freddo"
@@ -12,6 +16,13 @@ MANO_TREMANTE = "mano_tremante"
 COLPO_DI_CODA = "colpo_di_coda"
 FERITA_ESPOSTA = "ferita_esposta"
 SONO_ANCORA_QUI = "sono_ancora_qui"
+
+BRICIOLA_NASCOSTA = "briciola_nascosta"
+RAZIONE_RISPARMIATA = "razione_risparmiata"
+FIUTO_DA_DISPENSA = "fiuto_da_dispensa"
+PANCIA_BRONTOLANTE = "pancia_brontolante"
+MORSO_DELLA_FAME = "morso_della_fame"
+RESPIRO_CALMO = "respiro_calmo"
 
 SONO_ANCORA_QUI_SINGLE_1 = "single_1"
 SONO_ANCORA_QUI_SINGLE_2 = "single_2"
@@ -45,6 +56,54 @@ CRITICAL_CARD_NAMES = {
 
 CRITICAL_CARD_IDS = tuple(CRITICAL_CARD_NAMES)
 
+V05_HUNGER_CARD_NAMES = {
+    BRICIOLA_NASCOSTA: "Briciola Nascosta",
+    RAZIONE_RISPARMIATA: "Razione Risparmiata",
+    FIUTO_DA_DISPENSA: "Fiuto da Dispensa",
+    PANCIA_BRONTOLANTE: "Pancia Brontolante",
+    MORSO_DELLA_FAME: "Morso della Fame",
+    RESPIRO_CALMO: "Respiro Calmo",
+}
+
+V05_HUNGER_CARD_IDS = tuple(V05_HUNGER_CARD_NAMES)
+
+
+@dataclass(frozen=True)
+class CriticalDeckProfile:
+    """Composition profile for a critical/hunger deck."""
+
+    profile_id: str
+    deck_name: str
+    card_names: Mapping[str, str]
+    copies_per_effect: int
+
+    @property
+    def card_ids(self) -> tuple[str, ...]:
+        """Return card ids in profile order."""
+
+        return tuple(self.card_names)
+
+    @property
+    def cards_count(self) -> int:
+        """Return total card count for this profile."""
+
+        return len(self.card_ids) * self.copies_per_effect
+
+
+LEGACY_CRITICAL_DECK_PROFILE = CriticalDeckProfile(
+    profile_id=LEGACY_CRITICAL_DECK_PROFILE_ID,
+    deck_name="Mazzo Ferita Critica",
+    card_names=CRITICAL_CARD_NAMES,
+    copies_per_effect=2,
+)
+
+V05_HUNGER_DECK_PROFILE = CriticalDeckProfile(
+    profile_id=V05_HUNGER_DECK_PROFILE_ID,
+    deck_name="Mazzo Affamato",
+    card_names=V05_HUNGER_CARD_NAMES,
+    copies_per_effect=3,
+)
+
 
 @dataclass
 class CriticalCardEvent:
@@ -67,20 +126,25 @@ class CriticalCardEvent:
     player_critical_wounds_after: int = 0
 
 
-def build_critical_deck() -> list[str]:
-    """Return the unshuffled 16-card critical wound deck."""
+def build_critical_deck(
+    profile: CriticalDeckProfile = LEGACY_CRITICAL_DECK_PROFILE,
+) -> list[str]:
+    """Return an unshuffled deck for the selected profile."""
 
     return [
         card_id
-        for card_id in CRITICAL_CARD_IDS
-        for _ in range(2)
+        for card_id in profile.card_ids
+        for _ in range(profile.copies_per_effect)
     ]
 
 
-def shuffle_critical_deck(seed: int | None = None) -> list[str]:
-    """Return a shuffled critical wound deck reproducible by seed."""
+def shuffle_critical_deck(
+    seed: int | None = None,
+    profile: CriticalDeckProfile = LEGACY_CRITICAL_DECK_PROFILE,
+) -> list[str]:
+    """Return a shuffled deck for the selected profile reproducible by seed."""
 
-    deck = build_critical_deck()
+    deck = build_critical_deck(profile)
     Random(seed).shuffle(deck)
     return deck
 

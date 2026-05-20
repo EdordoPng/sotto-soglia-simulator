@@ -15,17 +15,27 @@ if str(SRC_PATH) not in sys.path:
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
+    BRICIOLA_NASCOSTA,
     COLPO_DI_CODA,
     CRITICAL_CARD_IDS,
     FERITA_ESPOSTA,
+    FIUTO_DA_DISPENSA,
+    LEGACY_CRITICAL_DECK_PROFILE,
     MANO_LUCIDA,
     MANO_TREMANTE,
+    MORSO_DELLA_FAME,
+    PANCIA_BRONTOLANTE,
+    RAZIONE_RISPARMIATA,
+    RESPIRO_CALMO,
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
     SONO_ANCORA_QUI_SINGLE_1,
     SONO_ANCORA_QUI_SINGLE_2,
     SONO_ANCORA_QUI_UP_TO_2_TARGETS,
+    V05_HUNGER_CARD_IDS,
+    V05_HUNGER_CARD_NAMES,
+    V05_HUNGER_DECK_PROFILE,
     build_critical_deck,
     shuffle_critical_deck,
     validate_critical_deck_order,
@@ -60,6 +70,49 @@ def test_critical_deck_contains_two_copies_of_eight_effects():
     assert len(deck) == 16
     assert set(deck) == set(CRITICAL_CARD_IDS)
     assert Counter(deck) == {card_id: 2 for card_id in CRITICAL_CARD_IDS}
+
+
+def test_legacy_critical_deck_profile_matches_existing_deck_composition():
+    deck = build_critical_deck(LEGACY_CRITICAL_DECK_PROFILE)
+
+    assert LEGACY_CRITICAL_DECK_PROFILE.deck_name == "Mazzo Ferita Critica"
+    assert LEGACY_CRITICAL_DECK_PROFILE.cards_count == 16
+    assert LEGACY_CRITICAL_DECK_PROFILE.copies_per_effect == 2
+    assert LEGACY_CRITICAL_DECK_PROFILE.card_ids == CRITICAL_CARD_IDS
+    assert Counter(deck) == {card_id: 2 for card_id in CRITICAL_CARD_IDS}
+
+
+def test_v05_hunger_deck_profile_contains_six_effects_and_eighteen_cards():
+    deck = build_critical_deck(V05_HUNGER_DECK_PROFILE)
+
+    assert V05_HUNGER_DECK_PROFILE.deck_name == "Mazzo Affamato"
+    assert V05_HUNGER_DECK_PROFILE.cards_count == 18
+    assert V05_HUNGER_DECK_PROFILE.copies_per_effect == 3
+    assert len(V05_HUNGER_CARD_IDS) == 6
+    assert len(deck) == 18
+    assert set(deck) == set(V05_HUNGER_CARD_IDS)
+    assert Counter(deck) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
+
+
+def test_v05_hunger_deck_profile_uses_expected_effect_names():
+    assert V05_HUNGER_CARD_NAMES == {
+        BRICIOLA_NASCOSTA: "Briciola Nascosta",
+        RAZIONE_RISPARMIATA: "Razione Risparmiata",
+        FIUTO_DA_DISPENSA: "Fiuto da Dispensa",
+        PANCIA_BRONTOLANTE: "Pancia Brontolante",
+        MORSO_DELLA_FAME: "Morso della Fame",
+        RESPIRO_CALMO: "Respiro Calmo",
+    }
+
+
+def test_v05_hunger_deck_shuffle_is_reproducible_with_seed():
+    first = shuffle_critical_deck(123, V05_HUNGER_DECK_PROFILE)
+    second = shuffle_critical_deck(123, V05_HUNGER_DECK_PROFILE)
+    different_seed = shuffle_critical_deck(124, V05_HUNGER_DECK_PROFILE)
+
+    assert first == second
+    assert first != different_seed
+    assert Counter(first) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
 
 
 def test_critical_deck_shuffle_is_reproducible_with_seed():
