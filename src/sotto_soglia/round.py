@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from collections.abc import Iterable, Mapping
 from random import Random
 
-from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO, PANDA_RIPOSO_FORZATO
+from sotto_soglia.animal_effects import (
+    PANDA_GRANDE_LETARGO,
+    PANDA_RIPOSO_FORZATO,
+    SCIMMIA_BUCCIA_DI_BANANA,
+)
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
@@ -29,12 +33,14 @@ from sotto_soglia.critical import (
 from sotto_soglia.models import Card
 from sotto_soglia.models import PlayerState
 from sotto_soglia.rules import (
+    apply_comparison_value_modifier,
     apply_life_loss,
-    find_lowest_effective_value_players,
+    choose_comparison_value_target,
     get_active_own_animal_effect_id,
     get_effective_comparison_value,
     get_effective_consumption_value,
     resolve_eliminations,
+    valid_comparison_value_targets,
 )
 from sotto_soglia.strategies import BaseStrategy, choose_fallback_critical_effect_target
 
@@ -154,15 +160,24 @@ def resolve_round(
         )
         for player_id, card in selected_cards.items()
     }
-    critical_wound_player_ids = find_lowest_effective_value_players(
+    _apply_animal_comparison_effects(
         player_map,
         selected_cards,
         config,
+        effective_comparison_values,
+        active_effects_by_player,
     )
     lowest_value = min(
         effective_comparison_values.values(),
         default=None,
     )
+    critical_wound_player_ids = {
+        player_id
+        for player_id, effective_value in effective_comparison_values.items()
+        if effective_value == lowest_value
+    }
+    if lowest_value is None:
+        critical_wound_player_ids = set()
 
     critical_draw_order = [
         player_id
@@ -448,6 +463,39 @@ def _draw_and_apply_critical_card(
     critical_events.append(event)
     if card_id == BRICIOLA_NASCOSTA:
         pending_life_recovery_events[player_id].append(event)
+
+
+def _apply_animal_comparison_effects(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+    effective_comparison_values: dict[int, int],
+    active_effects_by_player: Mapping[int, list[str]],
+) -> None:
+    """Apply supported after-reveal animal effects to round comparison values."""
+
+    for player_id, card in selected_cards.items():
+        source = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(source, card, config)
+        if effect_id != SCIMMIA_BUCCIA_DI_BANANA:
+            continue
+
+        valid_targets = valid_comparison_value_targets(
+            source,
+            player_map,
+            selected_cards,
+        )
+        target = choose_comparison_value_target(valid_targets)
+        if target is None:
+            continue
+
+        modified_value = apply_comparison_value_modifier(
+            effective_comparison_values[target.player_id],
+            -1,
+            target_active_effects=active_effects_by_player.get(target.player_id, []),
+            caused_by_opponent=True,
+        )
+        effective_comparison_values[target.player_id] = max(1, modified_value)
 
 
 def _schedule_animal_life_recoveries(
