@@ -16,11 +16,13 @@ from sotto_soglia.critical import (
     SONO_ANCORA_QUI,
     SONO_ANCORA_QUI_SINGLE_2,
     SONO_ANCORA_QUI_UP_TO_2_TARGETS,
+    NEXT_ROUND_EFFECTS,
     V05_HUNGER_CARD_IDS,
     V05_HUNGER_IMMEDIATE_EFFECTS,
     CriticalCardEvent,
     critical_card_name,
     critical_card_timing,
+    get_critical_deck_profile,
     resolve_v05_hunger_effect,
 )
 from sotto_soglia.models import Card
@@ -113,6 +115,7 @@ def resolve_round(
                 player_id: list(player.active_critical_effects)
                 for player_id, player in player_map.items()
             }
+        _validate_active_critical_effects_for_profile(active_effects_by_player, config)
     critical_events = list(preliminary_critical_events or [])
     critical_life_delta_by_player = {player_id: 0 for player_id in player_map}
 
@@ -264,6 +267,13 @@ def _draw_and_apply_critical_card(
         return
 
     card_id = critical_deck.pop(0)
+    profile = get_critical_deck_profile(config.critical_deck_profile_id)
+    if card_id not in profile.card_ids:
+        raise ValueError(
+            f"Critical card '{card_id}' is not valid for profile "
+            f"'{profile.profile_id}'"
+        )
+
     player = player_map[player_id]
     player.critical_cards_drawn.append(card_id)
     deck_position = len(player.critical_cards_drawn) + sum(
@@ -313,8 +323,12 @@ def _draw_and_apply_critical_card(
                 life_delta_targets[target.player_id] = delta
             target_ids.append(target.player_id)
         target_player_id = ",".join(str(target_id) for target_id in target_ids) or None
-    else:
+    elif card_id in NEXT_ROUND_EFFECTS:
         player.active_critical_effects.append(card_id)
+    else:
+        raise ValueError(
+            f"Critical card '{card_id}' is not supported by the round resolver"
+        )
 
     critical_events.append(
         CriticalCardEvent(
@@ -333,7 +347,29 @@ def _draw_and_apply_critical_card(
             player_lives_after=player.lives,
             player_critical_wounds_after=player.critical_wounds,
         )
+        )
+
+
+def _validate_active_critical_effects_for_profile(
+    active_effects_by_player: Mapping[int, list[str]],
+    config: GameConfig,
+) -> None:
+    """Reject active effects that do not belong to the configured profile."""
+
+    profile = get_critical_deck_profile(config.critical_deck_profile_id)
+    invalid_effects = sorted(
+        {
+            effect_id
+            for effects in active_effects_by_player.values()
+            for effect_id in effects
+            if effect_id not in profile.card_ids
+        }
     )
+    if invalid_effects:
+        raise ValueError(
+            "Active critical effects are not valid for profile "
+            f"'{profile.profile_id}': " + ", ".join(invalid_effects)
+        )
 
 
 def _choose_sono_ancora_qui_targets(

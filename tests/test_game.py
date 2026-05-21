@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 import sys
 
@@ -8,6 +9,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from sotto_soglia.config import GameConfig
+from sotto_soglia.critical import V05_HUNGER_CARD_IDS
 from sotto_soglia.game import GameResult, play_game
 from sotto_soglia.round import RoundResult
 
@@ -36,6 +38,9 @@ def test_play_game_with_four_players_returns_valid_result():
     result = play_game(game_id=1, players_count=4, seed=42)
 
     _assert_valid_result(result)
+    assert Counter(result.initial_critical_deck_order) == {
+        card_id: 3 for card_id in V05_HUNGER_CARD_IDS
+    }
 
 
 def test_play_game_rejects_too_few_players():

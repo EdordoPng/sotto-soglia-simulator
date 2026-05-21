@@ -7,14 +7,14 @@ from random import Random
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     FIUTO_DA_DISPENSA,
-    LEGACY_CRITICAL_DECK_PROFILE_ID,
     MANO_LUCIDA,
     MANO_TREMANTE,
     PANCIA_BRONTOLANTE,
     CriticalCardEvent,
-    build_critical_deck,
+    CriticalDeckProfile,
     critical_card_name,
     get_critical_deck_profile,
+    shuffle_critical_deck,
 )
 from sotto_soglia.deck import build_deck
 from sotto_soglia.models import Card, Color, PlayerState
@@ -129,23 +129,55 @@ def _build_game_critical_deck(config: GameConfig, seed: int | None, game_id: int
         return []
 
     profile = get_critical_deck_profile(config.critical_deck_profile_id)
-    if profile.profile_id != LEGACY_CRITICAL_DECK_PROFILE_ID:
-        raise NotImplementedError(
-            f"Critical deck profile '{profile.profile_id}' is not implemented "
-            "in the runtime yet."
-        )
 
     if config.critical_deck_order is not None:
+        _validate_critical_deck_order_for_profile(config.critical_deck_order, profile)
         return list(config.critical_deck_order)
 
-    deck = build_critical_deck(profile)
     deck_seed = config.critical_deck_seed
     if deck_seed is None:
         deck_seed = seed
     if deck_seed is not None:
         deck_seed += game_id - 1
-    Random(deck_seed).shuffle(deck)
-    return deck
+    return shuffle_critical_deck(deck_seed, profile)
+
+
+def _validate_critical_deck_order_for_profile(
+    deck_order: tuple[str, ...],
+    profile: CriticalDeckProfile,
+) -> None:
+    """Validate a fixed critical deck order against the configured profile."""
+
+    if len(deck_order) != profile.cards_count:
+        raise ValueError(
+            "critical_deck_order must contain exactly "
+            f"{profile.cards_count} cards for profile '{profile.profile_id}'"
+        )
+
+    unknown_ids = sorted(
+        {card_id for card_id in deck_order if card_id not in profile.card_ids}
+    )
+    if unknown_ids:
+        raise ValueError(
+            "critical_deck_order contains card ids not valid for profile "
+            f"'{profile.profile_id}': " + ", ".join(unknown_ids)
+        )
+
+    invalid_counts = {
+        card_id: deck_order.count(card_id)
+        for card_id in profile.card_ids
+        if deck_order.count(card_id) != profile.copies_per_effect
+    }
+    if invalid_counts:
+        details = ", ".join(
+            f"{card_id}={count}"
+            for card_id, count in sorted(invalid_counts.items())
+        )
+        raise ValueError(
+            "critical_deck_order must contain exactly "
+            f"{profile.copies_per_effect} copies of each card for profile "
+            f"'{profile.profile_id}' ({details})"
+        )
 
 
 def _critical_effects_snapshot(players: list[PlayerState]) -> dict[int, list[str]]:

@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass, replace
 
-from sotto_soglia.critical import LEGACY_CRITICAL_DECK_PROFILE_ID
+from sotto_soglia.critical import (
+    LEGACY_CRITICAL_DECK_PROFILE_ID,
+    V05_HUNGER_DECK_PROFILE_ID,
+)
 
 
 V05_PLAYER_PRESETS = {
@@ -10,16 +13,19 @@ V05_PLAYER_PRESETS = {
         "initial_lives": 12,
         "critical_wounds_limit": 5,
         "color_effects_enabled": False,
+        "critical_card_effects_enabled": True,
     },
     3: {
         "initial_lives": 17,
         "critical_wounds_limit": 4,
         "color_effects_enabled": False,
+        "critical_card_effects_enabled": True,
     },
     4: {
         "initial_lives": 24,
         "critical_wounds_limit": 4,
         "color_effects_enabled": False,
+        "critical_card_effects_enabled": True,
     },
 }
 
@@ -62,5 +68,6 @@ def get_v05_config_for_players(
         initial_lives=preset["initial_lives"],
         critical_wounds_limit=preset["critical_wounds_limit"],
         color_effects_enabled=preset["color_effects_enabled"],
-        critical_deck_profile_id=LEGACY_CRITICAL_DECK_PROFILE_ID,
+        critical_card_effects_enabled=preset["critical_card_effects_enabled"],
+        critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
     )

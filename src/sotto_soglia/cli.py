@@ -4,7 +4,11 @@ import argparse
 from dataclasses import replace
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
-from sotto_soglia.critical import SONO_ANCORA_QUI_VARIANTS, validate_critical_deck_order
+from sotto_soglia.critical import (
+    LEGACY_CRITICAL_DECK_PROFILE_ID,
+    SONO_ANCORA_QUI_VARIANTS,
+    validate_critical_deck_order,
+)
 from sotto_soglia.exporters import (
     export_parametric_simulation_result,
     export_simulation_result,
@@ -227,14 +231,17 @@ def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
     )
     config = get_v05_config_for_players(args.players)
     config_values = {
-        "critical_card_effects_enabled": parse_on_off(
-            args.critical_card_effects,
-            "--critical-card-effects",
-        ),
         "critical_deck_seed": args.critical_deck_seed,
         "critical_deck_order": critical_deck_order,
         "sono_ancora_qui_variant": args.sono_ancora_qui_variant,
     }
+    if args.critical_card_effects != "auto":
+        config_values["critical_card_effects_enabled"] = parse_on_off(
+            args.critical_card_effects,
+            "--critical-card-effects",
+        )
+    if critical_deck_order is not None:
+        config_values["critical_deck_profile_id"] = LEGACY_CRITICAL_DECK_PROFILE_ID
     if args.initial_lives is not None:
         if args.initial_lives <= 0:
             raise ValueError("--initial-lives must be greater than 0")
@@ -325,9 +332,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--critical-card-effects",
-        choices=["off", "on"],
-        default="off",
-        help="Enable experimental critical wound card effects.",
+        choices=["auto", "off", "on"],
+        default="auto",
+        help=(
+            "Critical wound/Affamato card effects: auto keeps the selected "
+            "preset value, on/off force an override."
+        ),
     )
     parser.add_argument(
         "--critical-deck-seed",

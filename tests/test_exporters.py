@@ -9,6 +9,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+from sotto_soglia.critical import V05_HUNGER_DECK_PROFILE_ID
 from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
 from sotto_soglia.simulation import SimulationRunner
 
@@ -50,8 +51,12 @@ def test_simulation_config_json_is_valid(tmp_path):
     assert data["players_count"] == 4
     assert data["games_count"] == 5
     assert data["base_seed"] == 42
+    assert data["critical_card_effects_enabled"] is True
+    assert data["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+    assert data["color_effects_enabled"] is False
     assert "generated_files" in data
     assert data["generated_files"]["games_summary"] == "games_summary.csv"
+    assert data["generated_files"]["critical_events"] == "critical_events.csv"
 
 
 def test_games_summary_csv_is_valid(tmp_path):

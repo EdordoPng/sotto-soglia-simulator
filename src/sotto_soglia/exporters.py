@@ -48,6 +48,7 @@ def export_simulation_result(
         "critical_wounds_limit": simulation_result.critical_wounds_limit,
         "color_effects_enabled": simulation_result.color_effects_enabled,
         "critical_card_effects_enabled": simulation_result.critical_card_effects_enabled,
+        "critical_deck_profile_id": simulation_result.critical_deck_profile_id,
         "critical_deck_seed": simulation_result.critical_deck_seed,
         "critical_deck_order": simulation_result.critical_deck_order,
         "sono_ancora_qui_variant": simulation_result.sono_ancora_qui_variant,

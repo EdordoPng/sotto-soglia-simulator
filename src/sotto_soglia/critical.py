@@ -235,7 +235,9 @@ def critical_card_name(card_id: str) -> str:
 
     if card_id in CRITICAL_CARD_NAMES:
         return CRITICAL_CARD_NAMES[card_id]
-    return V05_HUNGER_CARD_NAMES[card_id]
+    if card_id in V05_HUNGER_CARD_NAMES:
+        return V05_HUNGER_CARD_NAMES[card_id]
+    raise ValueError(f"Unknown critical card id '{card_id}'")
 
 
 def critical_card_timing(card_id: str) -> str:
@@ -243,7 +245,9 @@ def critical_card_timing(card_id: str) -> str:
 
     if card_id in IMMEDIATE_EFFECTS or card_id in V05_HUNGER_IMMEDIATE_EFFECTS:
         return "immediate"
-    return "next_round"
+    if card_id in NEXT_ROUND_EFFECTS or card_id in V05_HUNGER_NEXT_ROUND_EFFECTS:
+        return "next_round"
+    raise ValueError(f"Unknown critical card id '{card_id}'")
 
 
 def resolve_v05_hunger_effect(

@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from random import Random
 
@@ -47,7 +48,7 @@ from sotto_soglia.critical import (
     validate_critical_deck_order,
 )
 from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
-from sotto_soglia.game import _hand_sizes_from_critical_effects
+from sotto_soglia.game import _hand_sizes_from_critical_effects, play_game
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import resolve_round
 from sotto_soglia.simulation import SimulationRunner
@@ -160,6 +161,36 @@ def test_v05_hunger_deck_shuffle_is_reproducible_with_seed():
     assert first == second
     assert first != different_seed
     assert Counter(first) == {card_id: 3 for card_id in V05_HUNGER_CARD_IDS}
+
+
+def test_standard_v05_game_without_explicit_config_builds_hunger_deck():
+    result = play_game(game_id=1, players_count=4, seed=42)
+
+    assert result.critical_card_effects_enabled is True
+    assert len(result.initial_critical_deck_order) == 18
+    assert Counter(result.initial_critical_deck_order) == {
+        card_id: 3 for card_id in V05_HUNGER_CARD_IDS
+    }
+
+
+def test_v05_hunger_deck_order_is_not_reshuffled_during_game():
+    config = replace(get_v05_config_for_players(4), critical_deck_seed=123)
+
+    result = play_game(game_id=1, players_count=4, seed=42, config=config)
+
+    drawn_cards = [
+        event.critical_card_id
+        for event in result.critical_events
+        if event.deck_position is not None
+    ]
+    assert result.initial_critical_deck_order == shuffle_critical_deck(
+        123,
+        V05_HUNGER_DECK_PROFILE,
+    )
+    assert drawn_cards == result.initial_critical_deck_order[: len(drawn_cards)]
+    assert result.remaining_critical_deck == result.initial_critical_deck_order[
+        len(drawn_cards):
+    ]
 
 
 def test_briciola_nascosta_recovers_one_scorta_in_controlled_round():
@@ -990,23 +1021,68 @@ def test_all_v05_hunger_effects_are_implemented():
     assert V05_HUNGER_UNIMPLEMENTED_EFFECTS == set()
 
 
-def test_v05_hunger_profile_is_not_silently_used_in_runtime_without_explicit_link():
+def test_v05_hunger_profile_runs_in_standard_runtime():
     config = GameConfig(
         critical_card_effects_enabled=True,
         critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
     )
 
-    with pytest.raises(NotImplementedError) as error_info:
-        SimulationRunner().run(
-            players_count=2,
-            games_count=1,
-            seed=42,
-            config=config,
+    result = SimulationRunner().run(
+        players_count=2,
+        games_count=1,
+        seed=42,
+        config=config,
+    )
+
+    assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+    assert len(result.game_results[0].initial_critical_deck_order) == 18
+
+
+def test_depleted_v05_hunger_deck_still_adds_counter_without_effect():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == []
+    assert result.critical_events == []
+
+
+def test_critical_card_from_wrong_profile_raises_clear_error():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    with pytest.raises(ValueError, match="not valid for profile 'v05_hunger'"):
+        resolve_round(
+            players,
+            {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+            _v05_hunger_controlled_config(),
+            critical_deck=[BENDAGGIO_EMERGENZA],
         )
 
-    assert "Critical deck profile 'v05_hunger' is not implemented" in str(
-        error_info.value
+
+def test_legacy_profile_runtime_still_builds_legacy_deck():
+    config = GameConfig(
+        critical_card_effects_enabled=True,
+        critical_deck_profile_id=LEGACY_CRITICAL_DECK_PROFILE_ID,
     )
+
+    result = play_game(game_id=1, players_count=4, seed=42, config=config)
+
+    assert len(result.initial_critical_deck_order) == 16
+    assert Counter(result.initial_critical_deck_order) == {
+        card_id: 2 for card_id in CRITICAL_CARD_IDS
+    }
 
 
 def test_critical_deck_shuffle_is_reproducible_with_seed():
@@ -1683,7 +1759,12 @@ def test_export_writes_critical_files_when_enabled(tmp_path):
 
 
 def test_export_keeps_historical_files_only_when_critical_effects_off(tmp_path):
-    simulation = SimulationRunner().run(players_count=4, games_count=2, seed=42)
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=2,
+        seed=42,
+        config=GameConfig(),
+    )
 
     exported_files = export_simulation_result(simulation, tmp_path)
 
@@ -1845,6 +1926,71 @@ def test_cli_without_final_config_flags_uses_v05_player_preset(tmp_path):
     assert config["initial_lives"] == preset.initial_lives
     assert config["critical_wounds_limit"] == preset.critical_wounds_limit
     assert config["color_effects_enabled"] is False
+    assert config["critical_card_effects_enabled"] is True
+    assert config["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+    assert (tmp_path / "critical_events.csv").exists()
+    assert (tmp_path / "critical_deck_orders.csv").exists()
+    assert (tmp_path / "critical_card_stats.csv").exists()
+
+
+def test_cli_critical_card_effects_off_explicitly_disables_v05_effects(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "1",
+            "--seed",
+            "42",
+            "--critical-card-effects",
+            "off",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["critical_card_effects_enabled"] is False
+    assert config["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+    assert not (tmp_path / "critical_events.csv").exists()
+
+
+def test_cli_critical_card_effects_on_explicitly_enables_v05_effects(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "1",
+            "--seed",
+            "42",
+            "--critical-card-effects",
+            "on",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["critical_card_effects_enabled"] is True
+    assert config["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+    assert (tmp_path / "critical_events.csv").exists()
 
 
 def test_cli_final_config_flags_for_two_players_are_exported(tmp_path):

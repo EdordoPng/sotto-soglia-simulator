@@ -8,6 +8,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from sotto_soglia.cli import format_simulation_summary
+from sotto_soglia.critical import V05_HUNGER_DECK_PROFILE_ID
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
 from sotto_soglia.strategies import create_strategy
 
@@ -20,6 +21,8 @@ def test_simulation_runner_returns_ten_results_for_two_players():
     assert result.games_count == 10
     assert result.base_seed == 42
     assert len(result.game_results) == 10
+    assert result.critical_card_effects_enabled is True
+    assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
 
 
 def test_simulation_runner_returns_ten_results_for_four_players():

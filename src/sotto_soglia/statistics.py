@@ -12,9 +12,13 @@ from sotto_soglia.critical import (
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
     CRITICAL_CARD_IDS,
+    V05_HUNGER_CARD_IDS,
 )
 from sotto_soglia.game import GameResult
 from sotto_soglia.models import Color, EliminationReason
+
+
+ALL_CRITICAL_CARD_IDS = CRITICAL_CARD_IDS + V05_HUNGER_CARD_IDS
 
 
 class StatisticAggregator:
@@ -132,8 +136,12 @@ class StatisticAggregator:
         return {
             "critical_cards_drawn_total": 0,
             "critical_effects_triggered_total": 0,
-            "critical_effects_by_card": {card_id: 0 for card_id in CRITICAL_CARD_IDS},
-            "average_life_delta_by_card": {card_id: 0.0 for card_id in CRITICAL_CARD_IDS},
+            "critical_effects_by_card": {
+                card_id: 0 for card_id in ALL_CRITICAL_CARD_IDS
+            },
+            "average_life_delta_by_card": {
+                card_id: 0.0 for card_id in ALL_CRITICAL_CARD_IDS
+            },
             "total_life_gained_from_critical_cards": 0,
             "total_life_lost_from_critical_cards": 0,
             "total_damage_prevented_by_critical_cards": 0,
@@ -154,7 +162,7 @@ class StatisticAggregator:
                     "win_count_after_draw": 0,
                     "elimination_count_after_draw": 0,
                 }
-                for card_id in CRITICAL_CARD_IDS
+                for card_id in ALL_CRITICAL_CARD_IDS
             },
         }
 
@@ -162,8 +170,8 @@ class StatisticAggregator:
         """Aggregate critical wound card metrics from game event logs."""
 
         stats = self._empty_critical_card_stats()
-        life_delta_totals = {card_id: 0 for card_id in CRITICAL_CARD_IDS}
-        draw_counts = {card_id: 0 for card_id in CRITICAL_CARD_IDS}
+        life_delta_totals = {card_id: 0 for card_id in ALL_CRITICAL_CARD_IDS}
+        draw_counts = {card_id: 0 for card_id in ALL_CRITICAL_CARD_IDS}
 
         for result in game_results:
             winner_ids = set(result.winner_ids) if not result.is_draw else set()
@@ -184,9 +192,11 @@ class StatisticAggregator:
 
             for event in result.critical_events:
                 card_id = event.critical_card_id
-                if card_id not in CRITICAL_CARD_IDS:
+                if card_id not in ALL_CRITICAL_CARD_IDS:
                     continue
-                life_delta = event.life_delta_player + sum(event.life_delta_targets.values())
+                life_delta = event.life_delta_player + sum(
+                    event.life_delta_targets.values()
+                )
                 life_delta_totals[card_id] += life_delta
                 if event.deck_position is not None:
                     draw_counts[card_id] += 1
@@ -212,13 +222,16 @@ class StatisticAggregator:
             FERITA_ESPOSTA: "ferita_esposta_trigger_count",
             SONO_ANCORA_QUI: "sono_ancora_qui_trigger_count",
         }
-        for card_id in CRITICAL_CARD_IDS:
+        for card_id in ALL_CRITICAL_CARD_IDS:
             draw_count = draw_counts[card_id]
             activation_count = stats["critical_effects_by_card"][card_id]
             total_life_delta = life_delta_totals[card_id]
-            average_life_delta = total_life_delta / activation_count if activation_count else 0.0
+            average_life_delta = (
+                total_life_delta / activation_count if activation_count else 0.0
+            )
             stats["average_life_delta_by_card"][card_id] = average_life_delta
-            stats[trigger_key_by_card[card_id]] = activation_count
+            if card_id in trigger_key_by_card:
+                stats[trigger_key_by_card[card_id]] = activation_count
             stats["critical_card_stats"][card_id].update(
                 {
                     "draw_count": draw_count,

@@ -22,6 +22,7 @@ class SimulationResult:
     critical_wounds_limit: int = 3
     color_effects_enabled: bool = True
     critical_card_effects_enabled: bool = False
+    critical_deck_profile_id: str = "legacy"
     critical_deck_seed: int | None = None
     critical_deck_order: tuple[str, ...] | None = None
     sono_ancora_qui_variant: str = "single_2"
@@ -72,6 +73,7 @@ class SimulationRunner:
             critical_wounds_limit=config.critical_wounds_limit,
             color_effects_enabled=config.color_effects_enabled,
             critical_card_effects_enabled=config.critical_card_effects_enabled,
+            critical_deck_profile_id=config.critical_deck_profile_id,
             critical_deck_seed=config.critical_deck_seed,
             critical_deck_order=config.critical_deck_order,
             sono_ancora_qui_variant=config.sono_ancora_qui_variant,
