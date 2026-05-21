@@ -142,6 +142,40 @@ def test_simulation_runner_smoke_with_animal_card_effects_enabled():
     )
 
 
+def test_simulation_runner_preserves_strategy_decision_events_for_v05_balanced():
+    result = SimulationRunner().run(
+        players_count=4,
+        games_count=2,
+        seed=42,
+        strategies=create_strategy("v05_balanced"),
+    )
+
+    assert len(result.game_results) == 2
+    assert all(
+        hasattr(game_result, "strategy_decision_events")
+        for game_result in result.game_results
+    )
+    assert any(
+        game_result.strategy_decision_events
+        for game_result in result.game_results
+    )
+
+
+def test_simulation_runner_has_empty_strategy_decision_events_for_random():
+    result = SimulationRunner().run(
+        players_count=4,
+        games_count=2,
+        seed=42,
+        strategies=create_strategy("random"),
+    )
+
+    assert len(result.game_results) == 2
+    assert all(
+        game_result.strategy_decision_events == []
+        for game_result in result.game_results
+    )
+
+
 def test_simulation_runner_smoke_with_animal_card_effects_disabled():
     result = SimulationRunner().run(
         players_count=4,

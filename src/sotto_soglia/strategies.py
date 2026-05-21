@@ -47,6 +47,24 @@ class StrategyDecisionCandidate:
 
 
 @dataclass(frozen=True)
+class StrategyDecisionEvent:
+    """Internal telemetry for one strategy card decision."""
+
+    game_index: int
+    round_number: int
+    player_id: int
+    technical_color: str
+    animal: str
+    display_color: str
+    strategy_name: str
+    lives: int
+    critical_wounds: int
+    critical_wounds_limit: int
+    alive_players_count: int
+    candidates: tuple[StrategyDecisionCandidate, ...]
+
+
+@dataclass(frozen=True)
 class _RankedStrategyCandidate:
     """Internal ranked candidate retaining the original card object."""
 

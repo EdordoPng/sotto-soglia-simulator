@@ -15,6 +15,7 @@ from sotto_soglia.game import GameResult, play_game
 from sotto_soglia.animal_effects import CONIGLIO_SCATTO_IMPROVVISO
 from sotto_soglia.models import Card, Color
 from sotto_soglia.round import RoundResult
+from sotto_soglia.strategies import create_strategy
 
 
 def _assert_valid_result(result: GameResult) -> None:
@@ -23,6 +24,44 @@ def _assert_valid_result(result: GameResult) -> None:
     assert len(result.round_history) == result.rounds_count
     assert all(isinstance(round_result, RoundResult) for round_result in result.round_history)
     assert len(result.final_players) >= 2
+
+
+def _assert_valid_strategy_decision_event(event, candidates_count):
+    assert event.game_index == 1
+    assert event.round_number >= 1
+    assert event.player_id in {1, 2}
+    assert event.technical_color in {"BLUE", "RED"}
+    assert event.animal in {"Panda", "Coniglio"}
+    assert event.display_color in {"green", "orange"}
+    assert event.strategy_name in {"v05_basic", "v05_balanced"}
+    assert event.lives >= 0
+    assert event.critical_wounds >= 0
+    assert event.critical_wounds_limit > 0
+    assert event.alive_players_count == 2
+    assert len(event.candidates) == candidates_count
+
+    chosen = [candidate for candidate in event.candidates if candidate.chosen]
+    assert len(chosen) == 1
+    assert chosen[0].choice_rank == 1
+    assert sorted(candidate.choice_rank for candidate in event.candidates) == list(
+        range(1, candidates_count + 1)
+    )
+    for candidate in event.candidates:
+        assert candidate.candidate_card_color in {"BLUE", "RED"}
+        assert candidate.candidate_card_display_color in {"green", "orange"}
+        assert candidate.candidate_card_animal in {"Panda", "Coniglio"}
+        assert candidate.candidate_card_value in {1, 2}
+        assert candidate.effective_comparison >= 1
+        assert candidate.effective_consumption >= 1
+        assert isinstance(candidate.score, int | float)
+        assert isinstance(candidate.reason_flags, tuple)
+
+
+def _controlled_two_card_hands(players, rng, config, hand_sizes_by_player=None):
+    return {
+        1: [Card(Color.BLUE, 1), Card(Color.RED, 2)],
+        2: [Card(Color.RED, 1), Card(Color.BLUE, 2)],
+    }
 
 
 def test_play_game_with_two_players_returns_valid_result():
@@ -44,6 +83,73 @@ def test_play_game_with_four_players_returns_valid_result():
     assert Counter(result.initial_critical_deck_order) == {
         card_id: 3 for card_id in V05_HUNGER_CARD_IDS
     }
+
+
+def test_play_game_collects_strategy_decision_events_for_v05_balanced(monkeypatch):
+    monkeypatch.setattr(game_module, "_deal_hands", _controlled_two_card_hands)
+
+    result = play_game(
+        game_id=1,
+        players_count=2,
+        seed=42,
+        config=GameConfig(
+            initial_lives=1,
+            critical_wounds_limit=5,
+            cards_per_player=2,
+            color_effects_enabled=False,
+            animal_card_effects_enabled=True,
+            critical_card_effects_enabled=False,
+        ),
+        strategies=create_strategy("v05_balanced"),
+    )
+
+    assert result.strategy_decision_events
+    for event in result.strategy_decision_events:
+        _assert_valid_strategy_decision_event(event, candidates_count=2)
+
+
+def test_play_game_collects_strategy_decision_events_for_v05_basic(monkeypatch):
+    monkeypatch.setattr(game_module, "_deal_hands", _controlled_two_card_hands)
+
+    result = play_game(
+        game_id=1,
+        players_count=2,
+        seed=42,
+        config=GameConfig(
+            initial_lives=1,
+            critical_wounds_limit=5,
+            cards_per_player=2,
+            color_effects_enabled=False,
+            animal_card_effects_enabled=True,
+            critical_card_effects_enabled=False,
+        ),
+        strategies=create_strategy("v05_basic"),
+    )
+
+    assert result.strategy_decision_events
+    for event in result.strategy_decision_events:
+        _assert_valid_strategy_decision_event(event, candidates_count=2)
+
+
+def test_play_game_has_empty_strategy_decision_events_for_random(monkeypatch):
+    monkeypatch.setattr(game_module, "_deal_hands", _controlled_two_card_hands)
+
+    result = play_game(
+        game_id=1,
+        players_count=2,
+        seed=42,
+        config=GameConfig(
+            initial_lives=1,
+            critical_wounds_limit=5,
+            cards_per_player=2,
+            color_effects_enabled=False,
+            animal_card_effects_enabled=True,
+            critical_card_effects_enabled=False,
+        ),
+        strategies=create_strategy("random"),
+    )
+
+    assert result.strategy_decision_events == []
 
 
 def test_play_game_rejects_too_few_players():

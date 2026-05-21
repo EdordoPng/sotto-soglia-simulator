@@ -5,9 +5,12 @@ from collections.abc import Mapping, Sequence
 from random import Random
 
 from sotto_soglia.animal_effects import (
+    ANIMAL_DISPLAY_NAMES,
     AnimalEffectEvent,
     SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
+    get_animal_for_color,
+    get_display_color_for_technical_color,
 )
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
@@ -24,7 +27,12 @@ from sotto_soglia.critical import (
 from sotto_soglia.deck import build_deck
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import RoundResult, resolve_round
-from sotto_soglia.strategies import BaseStrategy, RandomStrategy
+from sotto_soglia.strategies import (
+    BaseStrategy,
+    RandomStrategy,
+    StrategyDecisionCandidate,
+    StrategyDecisionEvent,
+)
 
 
 @dataclass
@@ -44,6 +52,7 @@ class GameResult:
     remaining_critical_deck: list[str] = field(default_factory=list)
     critical_events: list[CriticalCardEvent] = field(default_factory=list)
     animal_events: list[AnimalEffectEvent] = field(default_factory=list)
+    strategy_decision_events: list[StrategyDecisionEvent] = field(default_factory=list)
 
 
 def create_players(players_count: int, config: GameConfig) -> list[PlayerState]:
@@ -204,6 +213,35 @@ def _active_animal_effects_snapshot(players: list[PlayerState]) -> dict[int, lis
         for player in players
         if player.is_alive
     }
+
+
+def _build_strategy_decision_event(
+    *,
+    game_id: int,
+    round_number: int,
+    player: PlayerState,
+    strategy_name: str,
+    critical_wounds_limit: int,
+    alive_players_count: int,
+    candidates: list[StrategyDecisionCandidate],
+) -> StrategyDecisionEvent:
+    """Build internal strategy-decision telemetry for one card choice."""
+
+    animal = get_animal_for_color(player.color)
+    return StrategyDecisionEvent(
+        game_index=game_id,
+        round_number=round_number,
+        player_id=player.player_id,
+        technical_color=player.color.name,
+        animal=ANIMAL_DISPLAY_NAMES[animal],
+        display_color=get_display_color_for_technical_color(player.color),
+        strategy_name=strategy_name,
+        lives=player.lives,
+        critical_wounds=player.critical_wounds,
+        critical_wounds_limit=critical_wounds_limit,
+        alive_players_count=alive_players_count,
+        candidates=tuple(candidates),
+    )
 
 
 def _hand_sizes_from_critical_effects(
@@ -376,6 +414,7 @@ def play_game(
     initial_critical_deck_order = list(critical_deck)
     critical_events: list[CriticalCardEvent] = []
     animal_events: list[AnimalEffectEvent] = []
+    strategy_decision_events: list[StrategyDecisionEvent] = []
 
     while len([player for player in players if player.is_alive]) > 1:
         if len(round_history) >= max_rounds:
@@ -407,10 +446,12 @@ def play_game(
         }
 
         selected_cards = {}
+        alive_players_count = len(alive_start_ids)
         for player_id in alive_start_ids:
             player = players[player_id - 1]
             hand = hands[player_id]
-            selected_card = strategy_by_player[player_id].choose_card(
+            strategy = strategy_by_player[player_id]
+            selected_card = strategy.choose_card(
                 player,
                 hand,
                 game_state,
@@ -421,6 +462,19 @@ def play_game(
                     f"Strategy selected a card not present in player {player_id}'s hand"
                 )
             selected_cards[player_id] = selected_card
+            candidates = strategy.evaluate_candidates(player, hand, game_state)
+            if candidates:
+                strategy_decision_events.append(
+                    _build_strategy_decision_event(
+                        game_id=game_id,
+                        round_number=round_number,
+                        player=player,
+                        strategy_name=strategy.name,
+                        critical_wounds_limit=config.critical_wounds_limit,
+                        alive_players_count=alive_players_count,
+                        candidates=candidates,
+                    )
+                )
 
         round_result = resolve_round(
             players,
@@ -461,6 +515,7 @@ def play_game(
                 remaining_critical_deck=list(critical_deck),
                 critical_events=critical_events,
                 animal_events=animal_events,
+                strategy_decision_events=strategy_decision_events,
             )
 
         if not alive_after:
@@ -482,6 +537,7 @@ def play_game(
                 remaining_critical_deck=list(critical_deck),
                 critical_events=critical_events,
                 animal_events=animal_events,
+                strategy_decision_events=strategy_decision_events,
             )
 
     alive_players = [player.player_id for player in players if player.is_alive]
@@ -499,4 +555,5 @@ def play_game(
         remaining_critical_deck=list(critical_deck),
         critical_events=critical_events,
         animal_events=animal_events,
+        strategy_decision_events=strategy_decision_events,
     )
