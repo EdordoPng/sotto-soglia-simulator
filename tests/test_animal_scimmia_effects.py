@@ -8,7 +8,10 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO
+from sotto_soglia.animal_effects import (
+    PANDA_GRANDE_LETARGO,
+    SCIMMIA_FINTA_INNOCENTE,
+)
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import RESPIRO_CALMO, V05_HUNGER_DECK_PROFILE_ID
 from sotto_soglia.models import Card, Color, PlayerState
@@ -387,6 +390,21 @@ def test_finta_innocente_activates_with_another_printed_one_and_reassigns_affama
     assert result.critical_wound_players == [2]
     assert players[0].critical_wounds == 0
     assert players[1].critical_wounds == 1
+    finta_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_FINTA_INNOCENTE
+    ]
+    assert len(finta_events) == 1
+    event = finta_events[0]
+    assert event.effect_id == SCIMMIA_FINTA_INNOCENTE
+    assert event.effect_name == "Finta Innocente"
+    assert event.timing == "hunger_assignment"
+    assert event.status == "applied"
+    assert event.reason == "other_printed_one"
+    assert event.player_id == 1
+    assert event.card_color == "GREEN"
+    assert event.card_value == 1
 
 
 def test_finta_innocente_counts_printed_value_not_effective_comparison():
@@ -413,6 +431,12 @@ def test_finta_innocente_counts_printed_value_not_effective_comparison():
     ) == 2
     assert result.lowest_value == 2
     assert result.critical_wound_players == [2]
+    assert any(
+        event.effect_id == SCIMMIA_FINTA_INNOCENTE
+        and event.status == "applied"
+        and event.reason == "other_printed_one"
+        for event in result.animal_events
+    )
 
 
 def test_finta_innocente_reassigns_affamato_to_lowest_remaining_player():
@@ -478,6 +502,19 @@ def test_finta_innocente_does_not_activate_without_other_printed_one():
     assert result.critical_wound_players == [1]
     assert result.base_damage_by_player[1] == 0
     assert players[0].lives == 12
+    finta_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_FINTA_INNOCENTE
+    ]
+    assert len(finta_events) == 1
+    event = finta_events[0]
+    assert event.timing == "hunger_assignment"
+    assert event.status == "not_activated"
+    assert event.reason == "no_other_printed_one"
+    assert event.player_id == 1
+    assert event.card_color == "GREEN"
+    assert event.card_value == 1
 
 
 def test_finta_innocente_is_inactive_when_animal_effects_are_disabled():
@@ -497,6 +534,10 @@ def test_finta_innocente_is_inactive_when_animal_effects_are_disabled():
 
     assert result.lowest_value == 1
     assert result.critical_wound_players == [1, 2]
+    assert not any(
+        event.effect_id == SCIMMIA_FINTA_INNOCENTE
+        for event in result.animal_events
+    )
 
 
 def test_finta_innocente_is_inactive_when_other_animals_play_scimmia_one():
@@ -517,6 +558,10 @@ def test_finta_innocente_is_inactive_when_other_animals_play_scimmia_one():
 
         assert result.lowest_value == 1
         assert result.critical_wound_players == [1, 2]
+        assert not any(
+            event.effect_id == SCIMMIA_FINTA_INNOCENTE
+            for event in result.animal_events
+        )
 
 
 def test_finta_innocente_active_scimmia_consumes_one_and_is_not_immune():

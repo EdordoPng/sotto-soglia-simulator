@@ -191,6 +191,7 @@ def resolve_round(
         player_map,
         selected_cards,
         config,
+        animal_events,
     )
     eligible_comparison_values = {
         player_id: effective_value
@@ -678,6 +679,7 @@ def _find_finta_innocente_excluded_players(
     player_map: Mapping[int, PlayerState],
     selected_cards: Mapping[int, Card],
     config: GameConfig,
+    animal_events: list[AnimalEffectEvent],
 ) -> set[int]:
     """Return players excluded from hunger by supported animal-card effects."""
 
@@ -694,6 +696,29 @@ def _find_finta_innocente_excluded_players(
         )
         if has_other_printed_one:
             excluded_player_ids.add(player_id)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=SCIMMIA_FINTA_INNOCENTE,
+                    effect_name="Finta Innocente",
+                    timing="hunger_assignment",
+                    status="applied",
+                    reason="other_printed_one",
+                )
+            )
+        else:
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=SCIMMIA_FINTA_INNOCENTE,
+                    effect_name="Finta Innocente",
+                    timing="hunger_assignment",
+                    status="not_activated",
+                    reason="no_other_printed_one",
+                )
+            )
 
     return excluded_player_ids
 

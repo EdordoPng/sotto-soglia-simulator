@@ -25,6 +25,7 @@ from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
     PANDA_RIPOSO_FORZATO,
+    SCIMMIA_FINTA_INNOCENTE,
     SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
     SCOIATTOLO_PICCOLA_RISERVA,
@@ -690,3 +691,58 @@ def test_animal_effect_events_csv_exports_grande_letargo_events(tmp_path):
     assert rows_by_timing["comparison"]["value_after"] == "3"
     assert rows_by_timing["next_round_consume"]["status"] == "consumed"
     assert {row["effect_id"] for row in rows} == {PANDA_GRANDE_LETARGO}
+
+
+def test_animal_effect_events_csv_exports_finta_innocente_events(tmp_path):
+    events = [
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=1,
+            effect_id=SCIMMIA_FINTA_INNOCENTE,
+            effect_name="Finta Innocente",
+            timing="hunger_assignment",
+            status="applied",
+            reason="other_printed_one",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=1,
+            effect_id=SCIMMIA_FINTA_INNOCENTE,
+            effect_name="Finta Innocente",
+            timing="hunger_assignment",
+            status="not_activated",
+            reason="no_other_printed_one",
+        ),
+    ]
+    simulation = SimulationResult(
+        players_count=3,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[RoundResult(round_number=1, animal_events=events)],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == 2
+    rows_by_status = {row["status"]: row for row in rows}
+    assert rows_by_status["applied"]["effect_id"] == SCIMMIA_FINTA_INNOCENTE
+    assert rows_by_status["applied"]["timing"] == "hunger_assignment"
+    assert rows_by_status["applied"]["reason"] == "other_printed_one"
+    assert rows_by_status["not_activated"]["effect_id"] == SCIMMIA_FINTA_INNOCENTE
+    assert rows_by_status["not_activated"]["timing"] == "hunger_assignment"
+    assert rows_by_status["not_activated"]["reason"] == "no_other_printed_one"
