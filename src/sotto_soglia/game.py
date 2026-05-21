@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 from random import Random
 
+from sotto_soglia.animal_effects import SCOIATTOLO_GHIANDA_NASCOSTA
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     FIUTO_DA_DISPENSA,
@@ -190,24 +191,48 @@ def _critical_effects_snapshot(players: list[PlayerState]) -> dict[int, list[str
     }
 
 
+def _active_animal_effects_snapshot(players: list[PlayerState]) -> dict[int, list[str]]:
+    """Snapshot next-round animal effects before this round can register new ones."""
+
+    return {
+        player.player_id: list(player.active_animal_effects)
+        for player in players
+        if player.is_alive
+    }
+
+
 def _hand_sizes_from_critical_effects(
     players: list[PlayerState],
     config: GameConfig,
     active_effects_by_player: Mapping[int, list[str]],
     game_id: int,
     round_number: int,
+    active_animal_effects_by_player: Mapping[int, list[str]] | None = None,
 ) -> tuple[dict[int, int], list[CriticalCardEvent]]:
     """Return per-player hand sizes and events from active next-round effects."""
 
     hand_sizes: dict[int, int] = {}
     events: list[CriticalCardEvent] = []
-    if not config.critical_card_effects_enabled:
+    if (
+        not config.critical_card_effects_enabled
+        and not config.animal_card_effects_enabled
+    ):
         return hand_sizes, events
+    active_animal_effects_by_player = active_animal_effects_by_player or {}
 
     for player in players:
         if not player.is_alive:
             continue
-        active_effects = active_effects_by_player.get(player.player_id, [])
+        active_effects = (
+            active_effects_by_player.get(player.player_id, [])
+            if config.critical_card_effects_enabled
+            else []
+        )
+        active_animal_effects = (
+            active_animal_effects_by_player.get(player.player_id, [])
+            if config.animal_card_effects_enabled
+            else []
+        )
         if MANO_TREMANTE in active_effects:
             hand_sizes[player.player_id] = 2
             events.append(
@@ -236,11 +261,13 @@ def _hand_sizes_from_critical_effects(
             for effect_id in active_effects
             if effect_id in (FIUTO_DA_DISPENSA, PANCIA_BRONTOLANTE)
         ]
-        if not hand_effects:
+        has_ghianda_nascosta = SCOIATTOLO_GHIANDA_NASCOSTA in active_animal_effects
+        if not hand_effects and not has_ghianda_nascosta:
             continue
 
         hand_size_delta = active_effects.count(FIUTO_DA_DISPENSA)
         hand_size_delta -= active_effects.count(PANCIA_BRONTOLANTE)
+        hand_size_delta += active_animal_effects.count(SCOIATTOLO_GHIANDA_NASCOSTA)
         hand_sizes[player.player_id] = min(
             4,
             max(2, config.cards_per_player + hand_size_delta),
@@ -348,12 +375,14 @@ def play_game(
             if player.is_alive
         ]
         active_effects_by_player = _critical_effects_snapshot(players)
+        active_animal_effects_by_player = _active_animal_effects_snapshot(players)
         hand_sizes_by_player, preliminary_events = _hand_sizes_from_critical_effects(
             players,
             config,
             active_effects_by_player,
             game_id,
             round_number,
+            active_animal_effects_by_player,
         )
         hands = _deal_hands(players, rng, config, hand_sizes_by_player)
         game_state = {

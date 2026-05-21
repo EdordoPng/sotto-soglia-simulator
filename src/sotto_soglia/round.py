@@ -10,6 +10,7 @@ from sotto_soglia.animal_effects import (
     SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
+    SCOIATTOLO_GHIANDA_NASCOSTA,
 )
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
@@ -567,6 +568,8 @@ def _schedule_next_round_animal_effects(
         effect_id = get_active_own_animal_effect_id(player, card, config)
         if effect_id == PANDA_GRANDE_LETARGO:
             player.active_animal_effects.append(PANDA_GRANDE_LETARGO)
+        elif effect_id == SCOIATTOLO_GHIANDA_NASCOSTA:
+            player.active_animal_effects.append(SCOIATTOLO_GHIANDA_NASCOSTA)
 
 
 def _schedule_animal_extra_consumptions(
