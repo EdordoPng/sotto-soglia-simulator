@@ -3,8 +3,13 @@
 from random import Random
 from typing import Any
 
+from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import COLPO_DI_CODA, SONO_ANCORA_QUI
 from sotto_soglia.models import Card, Color, PlayerState
+from sotto_soglia.rules import (
+    get_effective_comparison_value,
+    get_effective_consumption_value,
+)
 
 
 def _color_order(color: Color) -> int:
@@ -43,6 +48,14 @@ def _alive_opponents(
         for other in players
         if other.player_id != player.player_id and other.is_alive
     ]
+
+
+def _game_config(game_state: dict[str, Any] | None) -> GameConfig:
+    """Return the active config from game state, or legacy defaults."""
+
+    if game_state and isinstance(game_state.get("config"), GameConfig):
+        return game_state["config"]
+    return GameConfig()
 
 
 class BaseStrategy:
@@ -299,6 +312,74 @@ class MixedStrategy(BaseStrategy):
         )
 
 
+class V05BasicStrategy(BaseStrategy):
+    """Simple v0.5 strategy balancing Affamato risk and Scorte consumption."""
+
+    name = "v05_basic"
+
+    def choose_card(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+        rng: Random,
+    ) -> Card:
+        """Choose a card using effective v0.5 comparison and consumption values."""
+
+        config = _game_config(game_state)
+        alive_players_count = 1 + len(_alive_opponents(player, game_state))
+        evaluated_cards = [
+            (
+                card,
+                get_effective_comparison_value(player, card, config),
+                get_effective_consumption_value(player, card, config),
+            )
+            for card in hand
+        ]
+        lowest_hand_comparison = min(
+            comparison
+            for _, comparison, _ in evaluated_cards
+        )
+        affamato_remaining = config.critical_wounds_limit - player.critical_wounds
+        near_abandonment = affamato_remaining <= 1
+        cautious = affamato_remaining <= 2
+
+        def score(card_data: tuple[Card, int, int]) -> tuple[float, int, int, int, int]:
+            card, comparison, consumption = card_data
+            points = comparison * 3.0
+            points -= consumption * 2.0
+
+            low_comparison_penalty = max(0, 4 - comparison) * 2.0
+            if comparison == lowest_hand_comparison:
+                low_comparison_penalty += 3.0
+            if near_abandonment:
+                low_comparison_penalty *= 3.0
+            elif cautious:
+                low_comparison_penalty *= 1.8
+            if alive_players_count <= 2:
+                low_comparison_penalty *= 0.8
+            points -= low_comparison_penalty
+
+            if consumption >= player.lives:
+                points -= 100.0
+            else:
+                remaining_lives = player.lives - consumption
+                if remaining_lives <= 1:
+                    points -= 18.0
+                elif remaining_lives <= 2:
+                    points -= 9.0
+
+            return (
+                points,
+                -consumption,
+                comparison,
+                -card.value,
+                -_color_order(card.color),
+            )
+
+        return max(evaluated_cards, key=score)[0]
+
+
 class AdaptivePressureStrategy(BaseStrategy):
     """Strategy that balances pressure, critical-wound risk and survival."""
 
@@ -504,6 +585,7 @@ AVAILABLE_STRATEGIES = {
     AggressiveStrategy.name: AggressiveStrategy,
     AntiCriticalStrategy.name: AntiCriticalStrategy,
     MixedStrategy.name: MixedStrategy,
+    V05BasicStrategy.name: V05BasicStrategy,
     AdaptivePressureStrategy.name: AdaptivePressureStrategy,
     CriticalAdaptiveStrategy.name: CriticalAdaptiveStrategy,
 }
