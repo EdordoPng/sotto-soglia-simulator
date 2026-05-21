@@ -61,6 +61,32 @@ def test_scatto_improvviso_is_inactive_when_other_animal_plays_coniglio_one():
         assert get_effective_comparison_value(player, card, _animal_config()) == 1
 
 
+def test_grande_balzo_sets_own_coniglio_four_effective_comparison_to_five():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    card = Card(Color.RED, 4)
+
+    assert card.value == 4
+    assert card.consumption_value == 4
+    assert card.comparison_value == 4
+    assert get_effective_comparison_value(player, card, _animal_config()) == 5
+
+
+def test_grande_balzo_is_inactive_when_animal_effects_are_disabled():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    card = Card(Color.RED, 4)
+
+    assert get_effective_comparison_value(player, card, GameConfig()) == 4
+
+
+def test_grande_balzo_is_inactive_when_other_animal_plays_coniglio_four():
+    card = Card(Color.RED, 4)
+
+    for color in (Color.BLUE, Color.GREEN, Color.YELLOW):
+        player = PlayerState(player_id=1, color=color, lives=12)
+
+        assert get_effective_comparison_value(player, card, _animal_config()) == 4
+
+
 def test_round_affamato_uses_scatto_improvviso_effective_comparison_value():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
@@ -77,6 +103,40 @@ def test_round_affamato_uses_scatto_improvviso_effective_comparison_value():
     assert result.critical_wound_players == [1]
     assert players[0].critical_wounds == 1
     assert players[1].critical_wounds == 0
+
+
+def test_round_affamato_uses_grande_balzo_effective_comparison_value():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 4),
+        2: Card(Color.RED, 4),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.lowest_value == 4
+    assert result.critical_wound_players == [1]
+    assert players[0].critical_wounds == 1
+    assert players[1].critical_wounds == 0
+
+
+def test_round_ties_coniglio_four_when_animal_effects_are_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 4),
+        2: Card(Color.RED, 4),
+    }
+
+    result = resolve_round(players, selected_cards, GameConfig(color_effects_enabled=False))
+
+    assert result.lowest_value == 4
+    assert result.critical_wound_players == [1, 2]
 
 
 def test_round_ties_coniglio_one_when_animal_effects_are_disabled():

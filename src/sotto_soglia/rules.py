@@ -6,6 +6,7 @@ The full game rules will be implemented incrementally in later phases.
 from collections.abc import Iterable, Mapping
 
 from sotto_soglia.animal_effects import (
+    CONIGLIO_GRANDE_BALZO,
     CONIGLIO_SCATTO_IMPROVVISO,
     get_effect_id_for_card,
     is_own_animal_card_effect_active,
@@ -59,8 +60,12 @@ def get_effective_comparison_value(
     if not is_own_animal_card_effect_active(player, card):
         return card.comparison_value
 
-    if get_effect_id_for_card(card) == CONIGLIO_SCATTO_IMPROVVISO:
+    effect_id = get_effect_id_for_card(card)
+    if effect_id == CONIGLIO_SCATTO_IMPROVVISO:
         return 2
+
+    if effect_id == CONIGLIO_GRANDE_BALZO:
+        return 5
 
     return card.comparison_value
 
