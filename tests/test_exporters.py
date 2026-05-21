@@ -53,7 +53,7 @@ def test_simulation_config_json_is_valid(tmp_path):
     assert data["games_count"] == 5
     assert data["base_seed"] == 42
     assert data["critical_card_effects_enabled"] is True
-    assert data["animal_card_effects_enabled"] is False
+    assert data["animal_card_effects_enabled"] is True
     assert data["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
     assert data["color_effects_enabled"] is False
     assert "generated_files" in data
@@ -81,6 +81,28 @@ def test_simulation_config_json_exports_animal_card_effects_enabled_true(tmp_pat
         data = json.load(file)
 
     assert data["animal_card_effects_enabled"] is True
+
+
+def test_simulation_config_json_exports_animal_card_effects_enabled_false(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        config=GameConfig(
+            initial_lives=24,
+            critical_wounds_limit=4,
+            color_effects_enabled=False,
+            critical_card_effects_enabled=True,
+            animal_card_effects_enabled=False,
+            critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
+        ),
+    )
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["simulation_config"].open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    assert data["animal_card_effects_enabled"] is False
 
 
 def test_games_summary_csv_is_valid(tmp_path):

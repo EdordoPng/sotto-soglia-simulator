@@ -2217,6 +2217,7 @@ def test_cli_without_final_config_flags_uses_v05_player_preset(tmp_path):
     assert config["critical_wounds_limit"] == preset.critical_wounds_limit
     assert config["color_effects_enabled"] is False
     assert config["critical_card_effects_enabled"] is True
+    assert config["animal_card_effects_enabled"] is True
     assert config["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
     assert (tmp_path / "critical_events.csv").exists()
     assert (tmp_path / "critical_deck_orders.csv").exists()
@@ -2281,6 +2282,36 @@ def test_cli_critical_card_effects_on_explicitly_enables_v05_effects(tmp_path):
     assert config["critical_card_effects_enabled"] is True
     assert config["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
     assert (tmp_path / "critical_events.csv").exists()
+
+
+def test_cli_animal_card_effects_off_explicitly_disables_v05_effects(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "1",
+            "--seed",
+            "42",
+            "--animal-card-effects",
+            "off",
+            "--export",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    with (tmp_path / "simulation_config.json").open(encoding="utf-8") as file:
+        config = json.load(file)
+
+    assert config["animal_card_effects_enabled"] is False
+    assert config["critical_card_effects_enabled"] is True
+    assert config["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
 
 
 def test_cli_final_config_flags_for_two_players_are_exported(tmp_path):

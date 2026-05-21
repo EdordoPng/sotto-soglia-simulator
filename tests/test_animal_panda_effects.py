@@ -560,7 +560,11 @@ def test_runtime_standard_result_does_not_change_without_animal_effect_flag_for_
             PlayerState(player_id=2, color=Color.RED, lives=12),
         ],
         selected_cards,
-        replace(get_v05_config_for_players(2), critical_card_effects_enabled=False),
+        replace(
+            get_v05_config_for_players(2),
+            critical_card_effects_enabled=False,
+            animal_card_effects_enabled=False,
+        ),
     )
 
     assert v05_without_animals.critical_wound_players == baseline.critical_wound_players
@@ -591,7 +595,11 @@ def test_runtime_standard_result_does_not_recover_panda_one_without_animal_effec
     v05_without_animals = resolve_round(
         v05_players,
         selected_cards,
-        replace(get_v05_config_for_players(2), critical_card_effects_enabled=False),
+        replace(
+            get_v05_config_for_players(2),
+            critical_card_effects_enabled=False,
+            animal_card_effects_enabled=False,
+        ),
     )
 
     assert v05_without_animals.critical_wound_players == baseline.critical_wound_players
@@ -600,8 +608,8 @@ def test_runtime_standard_result_does_not_recover_panda_one_without_animal_effec
     assert v05_players[0].lives == baseline_players[0].lives == 10
 
 
-def test_game_config_and_v05_presets_keep_animal_effects_disabled():
+def test_game_config_legacy_disables_and_v05_presets_enable_animal_effects():
     assert GameConfig().animal_card_effects_enabled is False
-    assert get_v05_config_for_players(2).animal_card_effects_enabled is False
-    assert get_v05_config_for_players(3).animal_card_effects_enabled is False
-    assert get_v05_config_for_players(4).animal_card_effects_enabled is False
+    assert get_v05_config_for_players(2).animal_card_effects_enabled is True
+    assert get_v05_config_for_players(3).animal_card_effects_enabled is True
+    assert get_v05_config_for_players(4).animal_card_effects_enabled is True

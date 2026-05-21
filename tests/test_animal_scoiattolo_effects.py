@@ -925,4 +925,4 @@ def test_standard_runtime_does_not_change_when_animal_effects_are_disabled():
     assert hand_sizes == {}
     assert events == []
     assert GameConfig().animal_card_effects_enabled is False
-    assert get_v05_config_for_players(4).animal_card_effects_enabled is False
+    assert get_v05_config_for_players(4).animal_card_effects_enabled is True

@@ -14,18 +14,21 @@ V05_PLAYER_PRESETS = {
         "critical_wounds_limit": 5,
         "color_effects_enabled": False,
         "critical_card_effects_enabled": True,
+        "animal_card_effects_enabled": True,
     },
     3: {
         "initial_lives": 17,
         "critical_wounds_limit": 4,
         "color_effects_enabled": False,
         "critical_card_effects_enabled": True,
+        "animal_card_effects_enabled": True,
     },
     4: {
         "initial_lives": 24,
         "critical_wounds_limit": 4,
         "color_effects_enabled": False,
         "critical_card_effects_enabled": True,
+        "animal_card_effects_enabled": True,
     },
 }
 
@@ -70,5 +73,6 @@ def get_v05_config_for_players(
         critical_wounds_limit=preset["critical_wounds_limit"],
         color_effects_enabled=preset["color_effects_enabled"],
         critical_card_effects_enabled=preset["critical_card_effects_enabled"],
+        animal_card_effects_enabled=preset["animal_card_effects_enabled"],
         critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
     )

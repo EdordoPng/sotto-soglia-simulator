@@ -32,10 +32,10 @@ def test_game_config_disables_animal_card_effects_by_default():
     assert GameConfig().animal_card_effects_enabled is False
 
 
-def test_v05_presets_do_not_enable_animal_card_effects_yet():
-    assert get_v05_config_for_players(2).animal_card_effects_enabled is False
-    assert get_v05_config_for_players(3).animal_card_effects_enabled is False
-    assert get_v05_config_for_players(4).animal_card_effects_enabled is False
+def test_v05_presets_enable_animal_card_effects():
+    assert get_v05_config_for_players(2).animal_card_effects_enabled is True
+    assert get_v05_config_for_players(3).animal_card_effects_enabled is True
+    assert get_v05_config_for_players(4).animal_card_effects_enabled is True
 
 
 def test_scatto_improvviso_sets_own_coniglio_one_effective_comparison_to_two():
@@ -300,7 +300,11 @@ def test_runtime_standard_result_does_not_change_without_animal_effect_flag():
     v05_without_animals = resolve_round(
         players,
         selected_cards,
-        replace(get_v05_config_for_players(2), critical_card_effects_enabled=False),
+        replace(
+            get_v05_config_for_players(2),
+            critical_card_effects_enabled=False,
+            animal_card_effects_enabled=False,
+        ),
     )
 
     assert v05_without_animals.critical_wound_players == baseline.critical_wound_players
