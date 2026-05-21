@@ -11,6 +11,7 @@ from sotto_soglia.animal_effects import (
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
     SCOIATTOLO_GHIANDA_NASCOSTA,
+    SCOIATTOLO_PICCOLA_RISERVA,
 )
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
@@ -150,7 +151,7 @@ def resolve_round(
     critical_events = list(preliminary_critical_events or [])
     critical_life_delta_by_player = {player_id: 0 for player_id in player_map}
     pending_life_recoveries = {player_id: 0 for player_id in player_map}
-    pending_animal_life_recoveries = {player_id: 0 for player_id in player_map}
+    pending_animal_life_recoveries: dict[int, int] = {}
     pending_life_recovery_events: dict[int, list[CriticalCardEvent]] = {
         player_id: [] for player_id in player_map
     }
@@ -220,6 +221,7 @@ def resolve_round(
         player_map=player_map,
         selected_cards=selected_cards,
         config=config,
+        critical_wound_player_ids=critical_wound_player_ids,
         pending_life_recoveries=pending_animal_life_recoveries,
     )
     _schedule_next_round_animal_effects(
@@ -545,6 +547,7 @@ def _schedule_animal_life_recoveries(
     player_map: Mapping[int, PlayerState],
     selected_cards: Mapping[int, Card],
     config: GameConfig,
+    critical_wound_player_ids: set[int],
     pending_life_recoveries: dict[int, int],
 ) -> None:
     """Schedule same-round recovery from supported animal-card effects."""
@@ -553,6 +556,11 @@ def _schedule_animal_life_recoveries(
         player = player_map[player_id]
         effect_id = get_active_own_animal_effect_id(player, card, config)
         if effect_id == PANDA_RIPOSO_FORZATO:
+            schedule_life_recovery(pending_life_recoveries, player_id, 1)
+        elif (
+            effect_id == SCOIATTOLO_PICCOLA_RISERVA
+            and player_id not in critical_wound_player_ids
+        ):
             schedule_life_recovery(pending_life_recoveries, player_id, 1)
 
 

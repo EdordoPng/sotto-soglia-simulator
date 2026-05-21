@@ -83,7 +83,7 @@ def test_riposo_forzato_does_not_recover_before_recovery_phase(monkeypatch):
 
     round_module.resolve_round(players, selected_cards, _animal_config())
 
-    assert pending_seen_at_recovery[1] == 1
+    assert pending_seen_at_recovery == {1: 1}
     assert lives_seen_before_recovery[1] == 10
     assert players[0].lives == 11
 

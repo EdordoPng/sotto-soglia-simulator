@@ -20,6 +20,7 @@ from sotto_soglia.critical import (
 )
 from sotto_soglia.game import _deal_hands, _hand_sizes_from_critical_effects
 from sotto_soglia.models import Card, Color, PlayerState
+import sotto_soglia.round as round_module
 from sotto_soglia.round import resolve_round
 from sotto_soglia.rules import (
     get_effective_comparison_value,
@@ -309,6 +310,199 @@ def test_ghianda_nascosta_and_pancia_brontolante_cancel_to_three_cards():
     assert [event.critical_card_id for event in events] == [PANCIA_BRONTOLANTE]
 
 
+def test_piccola_riserva_recovers_one_in_recovery_phase_when_not_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=10),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 8
+
+
+def test_piccola_riserva_does_not_recover_before_recovery_phase(monkeypatch):
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=10),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+    lives_seen_before_recovery = {}
+    pending_seen_at_recovery = {}
+    original_apply = round_module.apply_pending_animal_life_recoveries
+
+    def spy_apply_pending_animal_life_recoveries(
+        player_map,
+        pending_life_recoveries,
+        config,
+    ):
+        lives_seen_before_recovery.update(
+            {
+                player_id: player.lives
+                for player_id, player in player_map.items()
+            }
+        )
+        pending_seen_at_recovery.update(pending_life_recoveries)
+        return original_apply(player_map, pending_life_recoveries, config)
+
+    monkeypatch.setattr(
+        round_module,
+        "apply_pending_animal_life_recoveries",
+        spy_apply_pending_animal_life_recoveries,
+    )
+
+    round_module.resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.RED, 1),
+        },
+        _animal_config(),
+    )
+
+    assert pending_seen_at_recovery == {1: 1}
+    assert lives_seen_before_recovery[1] == 7
+    assert players[0].lives == 8
+
+
+def test_piccola_riserva_does_not_exceed_initial_lives():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=12),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 10
+
+
+def test_piccola_riserva_does_not_activate_when_scoiattolo_receives_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=10),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.BLUE, 4),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[1] == 0
+    assert players[0].lives == 10
+
+
+def test_piccola_riserva_is_inactive_when_other_animals_play_scoiattolo_three():
+    for color in (Color.BLUE, Color.RED, Color.GREEN):
+        players = [
+            PlayerState(player_id=1, color=color, lives=10),
+            PlayerState(player_id=2, color=Color.BLUE, lives=12),
+        ]
+
+        result = resolve_round(
+            players,
+            {
+                1: Card(Color.YELLOW, 3),
+                2: Card(Color.BLUE, 1),
+            },
+            _animal_config(),
+        )
+
+        assert result.base_damage_by_player[1] == 3
+        assert players[0].lives == 7
+
+
+def test_piccola_riserva_is_inactive_when_animal_effects_are_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=10),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.BLUE, 1),
+        },
+        GameConfig(color_effects_enabled=False),
+    )
+
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 7
+
+
+def test_piccola_riserva_keeps_card_values_and_effective_comparison_unchanged():
+    scoiattolo = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
+    card = Card(Color.YELLOW, 3)
+
+    assert card.value == 3
+    assert card.comparison_value == 3
+    assert card.consumption_value == 3
+    assert get_effective_comparison_value(scoiattolo, card, _animal_config()) == 3
+    assert get_effective_consumption_value(scoiattolo, card, _animal_config()) == 3
+
+
+def test_piccola_riserva_does_not_modify_base_consumption():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=10),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.base_damage_by_player[1] == 3
+    assert result.total_damage_by_player[1] == 3
+    assert players[0].lives == 8
+
+
+def test_piccola_riserva_can_recover_from_zero_before_lives_elimination():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=3),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 3),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 1
+    assert players[0].is_alive is True
+    assert result.eliminated_players == []
+
+
 def test_existing_scimmia_effects_still_work():
     players = [
         PlayerState(player_id=1, color=Color.GREEN, lives=12),
@@ -400,20 +594,12 @@ def test_existing_coniglio_effects_still_work():
     ) == 5
 
 
-def test_piccola_riserva_and_dispensa_ordinata_are_not_implemented_yet():
+def test_dispensa_ordinata_is_not_implemented_yet():
     players = [
         PlayerState(player_id=1, color=Color.YELLOW, lives=12),
         PlayerState(player_id=2, color=Color.BLUE, lives=12),
     ]
 
-    resolve_round(
-        players,
-        {
-            1: Card(Color.YELLOW, 3),
-            2: Card(Color.BLUE, 2),
-        },
-        _animal_config(),
-    )
     resolve_round(
         players,
         {
@@ -424,14 +610,6 @@ def test_piccola_riserva_and_dispensa_ordinata_are_not_implemented_yet():
     )
 
     assert players[0].active_animal_effects == []
-    assert (
-        get_effective_consumption_value(
-            players[0],
-            Card(Color.YELLOW, 3),
-            _animal_config(),
-        )
-        == 3
-    )
     assert (
         get_effective_comparison_value(
             players[0],

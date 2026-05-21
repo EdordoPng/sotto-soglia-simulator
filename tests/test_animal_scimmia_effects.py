@@ -639,7 +639,7 @@ def test_banana_rubata_recovery_happens_in_recovery_phase(monkeypatch):
         _animal_config(),
     )
 
-    assert pending_seen_at_recovery[1] == 1
+    assert pending_seen_at_recovery == {1: 1}
     assert lives_seen_before_recovery[1] == 2
     assert players[0].lives == 3
 
@@ -688,12 +688,30 @@ def test_banana_rubata_target_with_one_scorta_consumes_and_scimmia_recovers():
     assert players[0].lives == 3
 
 
-def test_banana_rubata_target_at_zero_during_extra_does_not_recover_scimmia():
+def test_banana_rubata_target_at_zero_during_extra_does_not_recover_scimmia(
+    monkeypatch,
+):
     players = [
         PlayerState(player_id=1, color=Color.GREEN, lives=7),
         PlayerState(player_id=2, color=Color.BLUE, lives=1),
         PlayerState(player_id=3, color=Color.YELLOW, lives=12),
     ]
+    pending_seen_at_recovery = {}
+    original_apply = round_module.apply_pending_animal_life_recoveries
+
+    def spy_apply_pending_animal_life_recoveries(
+        player_map,
+        pending_life_recoveries,
+        config,
+    ):
+        pending_seen_at_recovery.update(pending_life_recoveries)
+        return original_apply(player_map, pending_life_recoveries, config)
+
+    monkeypatch.setattr(
+        round_module,
+        "apply_pending_animal_life_recoveries",
+        spy_apply_pending_animal_life_recoveries,
+    )
 
     result = resolve_round(
         players,
@@ -706,6 +724,7 @@ def test_banana_rubata_target_at_zero_during_extra_does_not_recover_scimmia():
     )
 
     assert result.extra_damage_by_player[2] == 0
+    assert pending_seen_at_recovery == {}
     assert players[1].lives == 0
     assert players[0].lives == 2
 
