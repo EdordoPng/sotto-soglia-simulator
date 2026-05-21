@@ -97,6 +97,7 @@ class PendingExtraConsumption:
     effect_id: str
     event: CriticalCardEvent | None = None
     recovery_player_id: int | None = None
+    source_card: Card | None = None
 
 
 def _players_by_id(
@@ -256,6 +257,7 @@ def resolve_round(
         config=config,
         critical_wound_player_ids=critical_wound_player_ids,
         pending_extra_consumptions=pending_extra_consumptions,
+        animal_events=animal_events,
     )
 
     base_damage_by_player = {
@@ -331,6 +333,7 @@ def resolve_round(
         critical_wound_player_ids=critical_wound_player_ids,
         critical_life_delta_by_player=critical_life_delta_by_player,
         pending_animal_life_recoveries=pending_animal_life_recoveries,
+        animal_events=animal_events,
     )
     extra_damage_by_player = {
         player_id: applied_extra_consumptions.get(player_id, 0)
@@ -875,6 +878,7 @@ def _schedule_animal_extra_consumptions(
     config: GameConfig,
     critical_wound_player_ids: set[int],
     pending_extra_consumptions: list[PendingExtraConsumption],
+    animal_events: list[AnimalEffectEvent],
 ) -> None:
     """Schedule supported animal-card extra consumptions for the extra phase."""
 
@@ -884,6 +888,17 @@ def _schedule_animal_extra_consumptions(
         if effect_id != SCIMMIA_BANANA_RUBATA:
             continue
         if player_id in critical_wound_player_ids:
+            animal_events.append(
+                _animal_event(
+                    player=source,
+                    card=card,
+                    effect_id=SCIMMIA_BANANA_RUBATA,
+                    effect_name="Banana Rubata",
+                    timing="extra_schedule",
+                    status="not_activated",
+                    reason="received_affamato",
+                )
+            )
             continue
 
         target = _choose_banana_rubata_target(
@@ -892,6 +907,17 @@ def _schedule_animal_extra_consumptions(
             critical_wound_player_ids=critical_wound_player_ids,
         )
         if target is None:
+            animal_events.append(
+                _animal_event(
+                    player=source,
+                    card=card,
+                    effect_id=SCIMMIA_BANANA_RUBATA,
+                    effect_name="Banana Rubata",
+                    timing="extra_schedule",
+                    status="not_activated",
+                    reason="no_valid_target",
+                )
+            )
             continue
 
         schedule_extra_consumption(
@@ -901,6 +927,20 @@ def _schedule_animal_extra_consumptions(
             amount=1,
             effect_id=SCIMMIA_BANANA_RUBATA,
             recovery_player_id=player_id,
+            source_card=card,
+        )
+        animal_events.append(
+            _animal_event(
+                player=source,
+                card=card,
+                effect_id=SCIMMIA_BANANA_RUBATA,
+                effect_name="Banana Rubata",
+                timing="extra_schedule",
+                status="scheduled",
+                target_player_id=target.player_id,
+                amount=1,
+                reason="target_selected",
+            )
         )
 
 
@@ -1006,6 +1046,7 @@ def schedule_extra_consumption(
     effect_id: str,
     event: CriticalCardEvent | None = None,
     recovery_player_id: int | None = None,
+    source_card: Card | None = None,
 ) -> None:
     """Schedule extra consumption for the explicit extra-consumption phase."""
 
@@ -1020,6 +1061,7 @@ def schedule_extra_consumption(
             effect_id=effect_id,
             event=event,
             recovery_player_id=recovery_player_id,
+            source_card=source_card,
         )
     )
 
@@ -1047,6 +1089,7 @@ def apply_pending_extra_consumptions(
     critical_wound_player_ids: set[int],
     critical_life_delta_by_player: dict[int, int] | None = None,
     pending_animal_life_recoveries: dict[int, int] | None = None,
+    animal_events: list[AnimalEffectEvent] | None = None,
 ) -> dict[int, int]:
     """Apply scheduled extra consumption after base consumption."""
 
@@ -1054,6 +1097,13 @@ def apply_pending_extra_consumptions(
     for pending in pending_extra_consumptions:
         target = player_map.get(pending.target_player_id)
         if target is None:
+            _collect_banana_rubata_extra_apply_event(
+                player_map=player_map,
+                pending=pending,
+                actual_consumed=0,
+                animal_events=animal_events,
+                reason="target_not_valid",
+            )
             continue
 
         actual_consumed = 0
@@ -1073,6 +1123,14 @@ def apply_pending_extra_consumptions(
                         critical_life_delta_by_player.get(target.player_id, 0)
                         - actual_consumed
                     )
+            reason = "extra_consumed" if actual_consumed else "actual_consumed_zero"
+            _collect_banana_rubata_extra_apply_event(
+                player_map=player_map,
+                pending=pending,
+                actual_consumed=actual_consumed,
+                animal_events=animal_events,
+                reason=reason,
+            )
             if (
                 pending.recovery_player_id is not None
                 and pending_animal_life_recoveries is not None
@@ -1083,6 +1141,19 @@ def apply_pending_extra_consumptions(
                     pending.recovery_player_id,
                     1,
                 )
+                _collect_banana_rubata_recovery_schedule_event(
+                    player_map=player_map,
+                    pending=pending,
+                    animal_events=animal_events,
+                )
+        else:
+            _collect_banana_rubata_extra_apply_event(
+                player_map=player_map,
+                pending=pending,
+                actual_consumed=actual_consumed,
+                animal_events=animal_events,
+                reason="actual_consumed_zero",
+            )
 
         if pending.event is not None:
             pending.event.effect_triggered = actual_consumed > 0
@@ -1097,6 +1168,76 @@ def apply_pending_extra_consumptions(
             ].critical_wounds
 
     return applied_by_player
+
+
+def _collect_banana_rubata_extra_apply_event(
+    player_map: Mapping[int, PlayerState],
+    pending: PendingExtraConsumption,
+    actual_consumed: int,
+    animal_events: list[AnimalEffectEvent] | None,
+    reason: str,
+) -> None:
+    """Collect telemetry for Banana Rubata extra consumption application."""
+
+    if (
+        animal_events is None
+        or pending.effect_id != SCIMMIA_BANANA_RUBATA
+        or pending.source_card is None
+    ):
+        return
+
+    source = player_map.get(pending.source_player_id)
+    if source is None:
+        return
+
+    animal_events.append(
+        _animal_event(
+            player=source,
+            card=pending.source_card,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="extra_apply",
+            status="applied" if actual_consumed > 0 else "not_applied",
+            target_player_id=pending.target_player_id,
+            amount=pending.amount,
+            actual_amount=actual_consumed,
+            reason=reason,
+        )
+    )
+
+
+def _collect_banana_rubata_recovery_schedule_event(
+    player_map: Mapping[int, PlayerState],
+    pending: PendingExtraConsumption,
+    animal_events: list[AnimalEffectEvent] | None,
+) -> None:
+    """Collect telemetry for Banana Rubata recovery scheduling."""
+
+    if (
+        animal_events is None
+        or pending.effect_id != SCIMMIA_BANANA_RUBATA
+        or pending.source_card is None
+        or pending.recovery_player_id is None
+    ):
+        return
+
+    source = player_map.get(pending.recovery_player_id)
+    if source is None:
+        return
+
+    animal_events.append(
+        _animal_event(
+            player=source,
+            card=pending.source_card,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="recovery_schedule",
+            status="scheduled",
+            target_player_id=pending.target_player_id,
+            amount=1,
+            reason="extra_consumed",
+        )
+    )
 
 
 def _validate_active_critical_effects_for_profile(

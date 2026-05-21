@@ -10,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
+    SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
 )
@@ -710,6 +711,40 @@ def test_banana_rubata_extra_consumption_and_conditional_recovery():
     assert result.extra_damage_by_player[2] == 1
     assert players[0].lives == 3
     assert players[1].lives == 7
+    banana_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BANANA_RUBATA
+    ]
+    assert len(banana_events) == 3
+    schedule_event = next(
+        event
+        for event in banana_events
+        if event.timing == "extra_schedule"
+    )
+    apply_event = next(
+        event
+        for event in banana_events
+        if event.timing == "extra_apply"
+    )
+    recovery_event = next(
+        event
+        for event in banana_events
+        if event.timing == "recovery_schedule"
+    )
+    assert schedule_event.status == "scheduled"
+    assert schedule_event.reason == "target_selected"
+    assert schedule_event.target_player_id == 2
+    assert schedule_event.amount == 1
+    assert apply_event.status == "applied"
+    assert apply_event.reason == "extra_consumed"
+    assert apply_event.target_player_id == 2
+    assert apply_event.amount == 1
+    assert apply_event.actual_amount == 1
+    assert recovery_event.status == "scheduled"
+    assert recovery_event.reason == "extra_consumed"
+    assert recovery_event.target_player_id == 2
+    assert recovery_event.amount == 1
 
 
 def test_banana_rubata_recovery_happens_in_recovery_phase(monkeypatch):
@@ -840,6 +875,26 @@ def test_banana_rubata_target_at_zero_during_extra_does_not_recover_scimmia(
     assert pending_seen_at_recovery == {}
     assert players[1].lives == 0
     assert players[0].lives == 2
+    banana_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BANANA_RUBATA
+    ]
+    assert len(banana_events) == 2
+    apply_event = next(
+        event
+        for event in banana_events
+        if event.timing == "extra_apply"
+    )
+    assert apply_event.status == "not_applied"
+    assert apply_event.reason == "actual_consumed_zero"
+    assert apply_event.target_player_id == 2
+    assert apply_event.amount == 1
+    assert apply_event.actual_amount == 0
+    assert not any(
+        event.timing == "recovery_schedule"
+        for event in banana_events
+    )
 
 
 def test_banana_rubata_does_not_activate_when_scimmia_receives_affamato():
@@ -861,6 +916,19 @@ def test_banana_rubata_does_not_activate_when_scimmia_receives_affamato():
     assert result.base_damage_by_player[1] == 0
     assert result.extra_damage_by_player[2] == 0
     assert players[0].lives == 7
+    banana_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BANANA_RUBATA
+    ]
+    assert len(banana_events) == 1
+    event = banana_events[0]
+    assert event.timing == "extra_schedule"
+    assert event.status == "not_activated"
+    assert event.reason == "received_affamato"
+    assert event.player_id == 1
+    assert event.card_color == "GREEN"
+    assert event.card_value == 5
 
 
 def test_banana_rubata_does_not_target_player_who_received_affamato():
@@ -881,6 +949,16 @@ def test_banana_rubata_does_not_target_player_who_received_affamato():
     assert result.critical_wound_players == [2]
     assert result.extra_damage_by_player[2] == 0
     assert players[0].lives == 2
+    banana_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BANANA_RUBATA
+    ]
+    assert len(banana_events) == 1
+    event = banana_events[0]
+    assert event.timing == "extra_schedule"
+    assert event.status == "not_activated"
+    assert event.reason == "no_valid_target"
 
 
 def test_banana_rubata_no_valid_targets_does_not_error_or_recover():
@@ -894,6 +972,16 @@ def test_banana_rubata_no_valid_targets_does_not_error_or_recover():
 
     assert result.extra_damage_by_player[1] == 0
     assert players[0].lives == 7
+    banana_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BANANA_RUBATA
+    ]
+    assert len(banana_events) == 1
+    event = banana_events[0]
+    assert event.timing == "extra_schedule"
+    assert event.status == "not_activated"
+    assert event.reason == "received_affamato"
 
 
 def test_banana_rubata_does_not_target_scimmia_itself():
@@ -968,6 +1056,10 @@ def test_banana_rubata_is_inactive_when_other_animals_play_scimmia_five():
 
         assert result.extra_damage_by_player[2] == 0
         assert players[0].lives == 2
+        assert not any(
+            event.effect_id == SCIMMIA_BANANA_RUBATA
+            for event in result.animal_events
+        )
 
 
 def test_banana_rubata_is_inactive_when_animal_effects_are_disabled():
@@ -989,6 +1081,10 @@ def test_banana_rubata_is_inactive_when_animal_effects_are_disabled():
 
     assert result.extra_damage_by_player[2] == 0
     assert players[0].lives == 2
+    assert not any(
+        event.effect_id == SCIMMIA_BANANA_RUBATA
+        for event in result.animal_events
+    )
 
 
 def test_coniglio_effects_continue_to_work_with_scimmia_effects_enabled():

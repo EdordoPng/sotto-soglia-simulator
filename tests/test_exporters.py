@@ -25,6 +25,7 @@ from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
     PANDA_RIPOSO_FORZATO,
+    SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
     SCOIATTOLO_DISPENSA_ORDINATA,
@@ -827,3 +828,128 @@ def test_animal_effect_events_csv_exports_buccia_di_banana_events(tmp_path):
     assert rows_by_status["blocked"]["actual_amount"] == "0"
     assert rows_by_status["not_activated"]["effect_id"] == SCIMMIA_BUCCIA_DI_BANANA
     assert rows_by_status["not_activated"]["reason"] == "no_valid_target"
+
+
+def test_animal_effect_events_csv_exports_banana_rubata_events(tmp_path):
+    events = [
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=5,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="extra_schedule",
+            status="scheduled",
+            target_player_id=1,
+            amount=1,
+            reason="target_selected",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=5,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="extra_apply",
+            status="applied",
+            target_player_id=1,
+            amount=1,
+            actual_amount=1,
+            reason="extra_consumed",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=5,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="recovery_schedule",
+            status="scheduled",
+            target_player_id=1,
+            amount=1,
+            reason="extra_consumed",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=5,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="extra_apply",
+            status="not_applied",
+            target_player_id=1,
+            amount=1,
+            actual_amount=0,
+            reason="actual_consumed_zero",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=5,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="extra_schedule",
+            status="not_activated",
+            reason="received_affamato",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=5,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            effect_name="Banana Rubata",
+            timing="extra_schedule",
+            status="not_activated",
+            reason="no_valid_target",
+        ),
+    ]
+    simulation = SimulationResult(
+        players_count=3,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[RoundResult(round_number=1, animal_events=events)],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == 6
+    rows_by_key = {
+        (row["timing"], row["status"], row["reason"]): row
+        for row in rows
+    }
+    schedule = rows_by_key[("extra_schedule", "scheduled", "target_selected")]
+    assert schedule["effect_id"] == SCIMMIA_BANANA_RUBATA
+    assert schedule["target_player_id"] == "1"
+    assert schedule["amount"] == "1"
+    applied = rows_by_key[("extra_apply", "applied", "extra_consumed")]
+    assert applied["actual_amount"] == "1"
+    recovery = rows_by_key[("recovery_schedule", "scheduled", "extra_consumed")]
+    assert recovery["target_player_id"] == "1"
+    assert recovery["amount"] == "1"
+    not_applied = rows_by_key[
+        ("extra_apply", "not_applied", "actual_consumed_zero")
+    ]
+    assert not_applied["actual_amount"] == "0"
+    assert rows_by_key[
+        ("extra_schedule", "not_activated", "received_affamato")
+    ]["effect_id"] == SCIMMIA_BANANA_RUBATA
+    assert rows_by_key[
+        ("extra_schedule", "not_activated", "no_valid_target")
+    ]["effect_id"] == SCIMMIA_BANANA_RUBATA
