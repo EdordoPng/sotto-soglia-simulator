@@ -7,6 +7,7 @@ from random import Random
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
+    BRICIOLA_NASCOSTA,
     COLPO_DI_CODA,
     FERITA_ESPOSTA,
     MORSO_DELLA_FAME,
@@ -18,7 +19,6 @@ from sotto_soglia.critical import (
     SONO_ANCORA_QUI_UP_TO_2_TARGETS,
     NEXT_ROUND_EFFECTS,
     V05_HUNGER_CARD_IDS,
-    V05_HUNGER_IMMEDIATE_EFFECTS,
     CriticalCardEvent,
     critical_card_name,
     critical_card_timing,
@@ -118,6 +118,10 @@ def resolve_round(
         _validate_active_critical_effects_for_profile(active_effects_by_player, config)
     critical_events = list(preliminary_critical_events or [])
     critical_life_delta_by_player = {player_id: 0 for player_id in player_map}
+    pending_life_recoveries = {player_id: 0 for player_id in player_map}
+    pending_life_recovery_events: dict[int, list[CriticalCardEvent]] = {
+        player_id: [] for player_id in player_map
+    }
 
     critical_wound_player_ids = find_lowest_value_players(selected_cards)
     lowest_value = min(
@@ -144,6 +148,8 @@ def resolve_round(
                 config=config,
                 critical_events=critical_events,
                 critical_life_delta_by_player=critical_life_delta_by_player,
+                pending_life_recoveries=pending_life_recoveries,
+                pending_life_recovery_events=pending_life_recovery_events,
                 strategies=strategies or {},
                 rng=rng,
                 game_state=game_state,
@@ -209,6 +215,14 @@ def resolve_round(
             round_number=round_number,
         )
 
+    apply_pending_life_recoveries(
+        player_map=player_map,
+        pending_life_recoveries=pending_life_recoveries,
+        config=config,
+        critical_life_delta_by_player=critical_life_delta_by_player,
+        pending_life_recovery_events=pending_life_recovery_events,
+    )
+
     for player_id, prevented_damage in prevented_damage_by_player.items():
         player_map[player_id].damage_prevented_by_critical_cards += prevented_damage
 
@@ -257,6 +271,8 @@ def _draw_and_apply_critical_card(
     config: GameConfig,
     critical_events: list[CriticalCardEvent],
     critical_life_delta_by_player: dict[int, int],
+    pending_life_recoveries: dict[int, int],
+    pending_life_recovery_events: dict[int, list[CriticalCardEvent]],
     strategies: Mapping[int, BaseStrategy],
     rng: Random,
     game_state: dict | None,
@@ -286,9 +302,10 @@ def _draw_and_apply_critical_card(
     effect_triggered = card_id in (BENDAGGIO_EMERGENZA, SONO_ANCORA_QUI)
 
     if card_id in V05_HUNGER_CARD_IDS:
-        life_delta_player = resolve_v05_hunger_effect(card_id, player, config)
-        critical_life_delta_by_player[player_id] += life_delta_player
-        effect_triggered = card_id in V05_HUNGER_IMMEDIATE_EFFECTS
+        resolve_v05_hunger_effect(card_id, player, config)
+        effect_triggered = False
+        if card_id == BRICIOLA_NASCOSTA:
+            schedule_life_recovery(pending_life_recoveries, player_id, 1)
     elif card_id == BENDAGGIO_EMERGENZA:
         before = player.lives
         player.lives = min(config.initial_lives, player.lives + 1)
@@ -311,7 +328,9 @@ def _draw_and_apply_critical_card(
             game_state=game_state,
             variant=config.sono_ancora_qui_variant,
         )
-        target_damage = 2 if config.sono_ancora_qui_variant == SONO_ANCORA_QUI_SINGLE_2 else 1
+        target_damage = (
+            2 if config.sono_ancora_qui_variant == SONO_ANCORA_QUI_SINGLE_2 else 1
+        )
         target_ids: list[int] = []
         for target in selected_targets:
             before = target.lives
@@ -330,24 +349,83 @@ def _draw_and_apply_critical_card(
             f"Critical card '{card_id}' is not supported by the round resolver"
         )
 
-    critical_events.append(
-        CriticalCardEvent(
-            game_id=game_id,
-            round_number=round_number,
-            draw_order=draw_order,
-            player_id=player_id,
-            critical_card_id=card_id,
-            critical_card_name=critical_card_name(card_id),
-            timing=critical_card_timing(card_id),
-            effect_triggered=effect_triggered if card_id != SONO_ANCORA_QUI else target_player_id is not None,
-            target_player_id=target_player_id if card_id == SONO_ANCORA_QUI else None,
-            life_delta_player=life_delta_player,
-            life_delta_targets=life_delta_targets,
-            deck_position=deck_position,
-            player_lives_after=player.lives,
-            player_critical_wounds_after=player.critical_wounds,
-        )
-        )
+    event = CriticalCardEvent(
+        game_id=game_id,
+        round_number=round_number,
+        draw_order=draw_order,
+        player_id=player_id,
+        critical_card_id=card_id,
+        critical_card_name=critical_card_name(card_id),
+        timing=critical_card_timing(card_id),
+        effect_triggered=(
+            effect_triggered
+            if card_id != SONO_ANCORA_QUI
+            else target_player_id is not None
+        ),
+        target_player_id=target_player_id if card_id == SONO_ANCORA_QUI else None,
+        life_delta_player=life_delta_player,
+        life_delta_targets=life_delta_targets,
+        deck_position=deck_position,
+        player_lives_after=player.lives,
+        player_critical_wounds_after=player.critical_wounds,
+    )
+    critical_events.append(event)
+    if card_id == BRICIOLA_NASCOSTA:
+        pending_life_recovery_events[player_id].append(event)
+
+
+def schedule_life_recovery(
+    pending_life_recoveries: dict[int, int],
+    player_id: int,
+    amount: int,
+) -> None:
+    """Schedule same-round life/scorte recovery for the recovery phase."""
+
+    if amount <= 0:
+        return
+
+    pending_life_recoveries[player_id] = (
+        pending_life_recoveries.get(player_id, 0) + amount
+    )
+
+
+def apply_pending_life_recoveries(
+    player_map: Mapping[int, PlayerState],
+    pending_life_recoveries: Mapping[int, int],
+    config: GameConfig,
+    critical_life_delta_by_player: dict[int, int] | None = None,
+    pending_life_recovery_events: Mapping[int, list[CriticalCardEvent]] | None = None,
+) -> dict[int, int]:
+    """Apply scheduled recovery after damage and before eliminations."""
+
+    applied_recoveries: dict[int, int] = {}
+    for player_id, amount in pending_life_recoveries.items():
+        if amount <= 0:
+            continue
+
+        player = player_map[player_id]
+        before = player.lives
+        player.lives = min(config.initial_lives, player.lives + amount)
+        recovered = player.lives - before
+        applied_recoveries[player_id] = recovered
+
+        if recovered:
+            player.life_gained_from_critical_cards += recovered
+            if critical_life_delta_by_player is not None:
+                critical_life_delta_by_player[player_id] = (
+                    critical_life_delta_by_player.get(player_id, 0) + recovered
+                )
+
+        remaining_recovered = recovered
+        for event in (pending_life_recovery_events or {}).get(player_id, []):
+            event_delta = min(1, remaining_recovered)
+            event.life_delta_player = event_delta
+            event.effect_triggered = event_delta > 0
+            event.player_lives_after = player.lives
+            event.player_critical_wounds_after = player.critical_wounds
+            remaining_recovered -= event_delta
+
+    return applied_recoveries
 
 
 def _validate_active_critical_effects_for_profile(

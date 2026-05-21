@@ -30,7 +30,8 @@ PANCIA_BRONTOLANTE = "pancia_brontolante"
 MORSO_DELLA_FAME = "morso_della_fame"
 RESPIRO_CALMO = "respiro_calmo"
 
-V05_HUNGER_IMMEDIATE_EFFECTS = {BRICIOLA_NASCOSTA}
+V05_HUNGER_IMMEDIATE_EFFECTS: set[str] = set()
+V05_HUNGER_RECOVERY_EFFECTS = {BRICIOLA_NASCOSTA}
 V05_HUNGER_NEXT_ROUND_EFFECTS = {
     RAZIONE_RISPARMIATA,
     FIUTO_DA_DISPENSA,
@@ -245,6 +246,8 @@ def critical_card_timing(card_id: str) -> str:
 
     if card_id in IMMEDIATE_EFFECTS or card_id in V05_HUNGER_IMMEDIATE_EFFECTS:
         return "immediate"
+    if card_id in V05_HUNGER_RECOVERY_EFFECTS:
+        return "recovery"
     if card_id in NEXT_ROUND_EFFECTS or card_id in V05_HUNGER_NEXT_ROUND_EFFECTS:
         return "next_round"
     raise ValueError(f"Unknown critical card id '{card_id}'")
@@ -259,6 +262,8 @@ def resolve_v05_hunger_effect(
 
     The legacy ``lives`` field represents Scorte for the v0.5 transition, and
     ``critical_wounds`` represents Affamato cards already received.
+    Briciola Nascosta is scheduled by the round resolver and recovered later in
+    the same round, so this helper does not mutate lives for that card.
     """
 
     if card_id not in V05_HUNGER_CARD_IDS:
@@ -271,11 +276,7 @@ def resolve_v05_hunger_effect(
         )
 
     if card_id == BRICIOLA_NASCOSTA:
-        before = player.lives
-        player.lives = min(config.initial_lives, player.lives + 1)
-        life_delta = player.lives - before
-        player.life_gained_from_critical_cards += life_delta
-        return life_delta
+        return 0
 
     if card_id == RAZIONE_RISPARMIATA:
         player.active_critical_effects.append(card_id)

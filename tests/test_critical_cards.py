@@ -44,13 +44,19 @@ from sotto_soglia.critical import (
     V05_HUNGER_UNIMPLEMENTED_EFFECTS,
     build_critical_deck,
     get_critical_deck_profile,
+    resolve_v05_hunger_effect,
     shuffle_critical_deck,
     validate_critical_deck_order,
 )
 from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
 from sotto_soglia.game import _hand_sizes_from_critical_effects, play_game
-from sotto_soglia.models import Card, Color, PlayerState
-from sotto_soglia.round import resolve_round
+from sotto_soglia.models import Card, Color, EliminationReason, PlayerState
+from sotto_soglia.round import (
+    apply_pending_life_recoveries,
+    resolve_round,
+    schedule_life_recovery,
+)
+from sotto_soglia.rules import apply_life_loss, resolve_eliminations
 from sotto_soglia.simulation import SimulationRunner
 from sotto_soglia.strategies import (
     AggressiveStrategy,
@@ -215,11 +221,32 @@ def test_briciola_nascosta_recovers_one_scorta_in_controlled_round():
     event = result.critical_events[0]
     assert event.critical_card_id == BRICIOLA_NASCOSTA
     assert event.critical_card_name == "Briciola Nascosta"
-    assert event.timing == "immediate"
+    assert event.timing == "recovery"
     assert event.effect_triggered is True
     assert event.life_delta_player == 1
     assert event.player_lives_after == 8
     assert event.player_critical_wounds_after == 1
+
+
+def test_briciola_nascosta_does_not_recover_immediately_before_recovery_phase():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=7)
+    config = _v05_hunger_controlled_config()
+    pending_recoveries = {1: 0}
+
+    life_delta = resolve_v05_hunger_effect(BRICIOLA_NASCOSTA, player, config)
+    schedule_life_recovery(pending_recoveries, player.player_id, 1)
+
+    assert life_delta == 0
+    assert player.lives == 7
+
+    applied_recoveries = apply_pending_life_recoveries(
+        {1: player},
+        pending_recoveries,
+        config,
+    )
+
+    assert applied_recoveries == {1: 1}
+    assert player.lives == 8
 
 
 def test_briciola_nascosta_does_not_exceed_initial_scorte():
@@ -239,7 +266,66 @@ def test_briciola_nascosta_does_not_exceed_initial_scorte():
     assert players[0].critical_wounds == 1
     assert players[0].life_gained_from_critical_cards == 0
     assert result.critical_events[0].life_delta_player == 0
+    assert result.critical_events[0].effect_triggered is False
     assert result.critical_events[0].player_critical_wounds_after == 1
+
+
+def test_briciola_nascosta_keeps_affamato_card_counted_after_recovery():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=7),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[BRICIOLA_NASCOSTA],
+    )
+
+    assert players[0].lives == 8
+    assert players[0].critical_wounds == 1
+    assert players[0].critical_cards_drawn == [BRICIOLA_NASCOSTA]
+
+
+def test_briciola_recovery_phase_happens_after_current_damage_step_b():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=1)
+    config = _v05_hunger_controlled_config()
+    pending_recoveries = {1: 0}
+    schedule_life_recovery(pending_recoveries, player.player_id, 1)
+
+    # Step B keeps the current damage architecture; Step C will split all
+    # extra-consumption details more completely.
+    apply_life_loss(player, 1)
+    assert player.lives == 0
+
+    apply_pending_life_recoveries({1: player}, pending_recoveries, config)
+    eliminated_players = resolve_eliminations({1: player}, config)
+
+    assert player.lives == 1
+    assert player.is_alive is True
+    assert player.elimination_reason is EliminationReason.NONE
+    assert eliminated_players == []
+
+
+def test_briciola_recovery_does_not_prevent_affamato_limit_elimination():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=7, critical_wounds=4),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {1: Card(Color.BLUE, 1), 2: Card(Color.RED, 3)},
+        _v05_hunger_controlled_config(),
+        critical_deck=[BRICIOLA_NASCOSTA],
+    )
+
+    assert players[0].lives == 8
+    assert players[0].critical_wounds == 5
+    assert players[0].is_alive is False
+    assert players[0].elimination_reason is EliminationReason.CRITICAL_WOUNDS
+    assert result.eliminated_players == [1]
 
 
 def test_razione_risparmiata_registers_next_round_effect_without_immediate_scorte_change():
