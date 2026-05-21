@@ -12,6 +12,7 @@ from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
     SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
+    SCOIATTOLO_PICCOLA_RISERVA,
 )
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
@@ -336,6 +337,21 @@ def test_piccola_riserva_recovers_one_in_recovery_phase_when_not_affamato():
     assert result.critical_wound_players == [2]
     assert result.base_damage_by_player[1] == 3
     assert players[0].lives == 8
+    riserva_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCOIATTOLO_PICCOLA_RISERVA
+    ]
+    assert len(riserva_events) == 1
+    event = riserva_events[0]
+    assert event.effect_id == SCOIATTOLO_PICCOLA_RISERVA
+    assert event.effect_name == "Piccola Riserva"
+    assert event.timing == "recovery_schedule"
+    assert event.status == "scheduled"
+    assert event.player_id == 1
+    assert event.card_color == "YELLOW"
+    assert event.card_value == 3
+    assert event.amount == 1
 
 
 def test_piccola_riserva_does_not_recover_before_recovery_phase(monkeypatch):
@@ -418,6 +434,10 @@ def test_piccola_riserva_does_not_activate_when_scoiattolo_receives_affamato():
     assert result.critical_wound_players == [1]
     assert result.base_damage_by_player[1] == 0
     assert players[0].lives == 10
+    assert not any(
+        event.effect_id == SCOIATTOLO_PICCOLA_RISERVA
+        for event in result.animal_events
+    )
 
 
 def test_piccola_riserva_is_inactive_when_other_animals_play_scoiattolo_three():

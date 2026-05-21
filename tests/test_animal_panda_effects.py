@@ -10,7 +10,11 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import RAZIONE_RISPARMIATA, V05_HUNGER_DECK_PROFILE_ID
-from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO, PANDA_RIPOSO_FORZATO
+from sotto_soglia.animal_effects import (
+    PANDA_GRANDE_LETARGO,
+    PANDA_RESPIRO_LENTO,
+    PANDA_RIPOSO_FORZATO,
+)
 from sotto_soglia.models import Card, Color, EliminationReason, PlayerState
 import sotto_soglia.round as round_module
 from sotto_soglia.round import resolve_round
@@ -60,8 +64,13 @@ def test_riposo_forzato_logs_scheduled_animal_event():
 
     result = resolve_round(players, selected_cards, _animal_config())
 
-    assert len(result.animal_events) == 1
-    event = result.animal_events[0]
+    riposo_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_RIPOSO_FORZATO
+    ]
+    assert len(riposo_events) == 1
+    event = riposo_events[0]
     assert event.effect_id == PANDA_RIPOSO_FORZATO
     assert event.effect_name == "Riposo Forzato"
     assert event.timing == "recovery_schedule"
@@ -241,6 +250,37 @@ def test_round_base_consumption_uses_respiro_lento_when_panda_is_not_affamato():
     assert players[0].lives == 10
 
 
+def test_round_logs_respiro_lento_consumption_animal_event():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 3),
+        2: Card(Color.RED, 1),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    respiro_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_RESPIRO_LENTO
+    ]
+    assert len(respiro_events) == 1
+    event = respiro_events[0]
+    assert event.effect_id == PANDA_RESPIRO_LENTO
+    assert event.effect_name == "Respiro Lento"
+    assert event.timing == "consumption"
+    assert event.status == "applied"
+    assert event.player_id == 1
+    assert event.card_color == "BLUE"
+    assert event.card_value == 3
+    assert event.value_before == 3
+    assert event.value_after == 2
+    assert event.amount == 1
+
+
 def test_respiro_lento_does_not_make_affamato_panda_consume_two():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
@@ -256,6 +296,10 @@ def test_respiro_lento_does_not_make_affamato_panda_consume_two():
     assert result.critical_wound_players == [1]
     assert result.base_damage_by_player[1] == 0
     assert players[0].lives == 12
+    assert not any(
+        event.effect_id == PANDA_RESPIRO_LENTO
+        for event in result.animal_events
+    )
 
 
 def test_respiro_lento_does_not_modify_effective_comparison_value():

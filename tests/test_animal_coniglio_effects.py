@@ -10,7 +10,11 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import BRICIOLA_NASCOSTA, V05_HUNGER_DECK_PROFILE_ID
-from sotto_soglia.animal_effects import CONIGLIO_SCATTO_IMPROVVISO
+from sotto_soglia.animal_effects import (
+    CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_PASSO_LEGGERO,
+    CONIGLIO_SCATTO_IMPROVVISO,
+)
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import resolve_round
 from sotto_soglia.rules import (
@@ -217,6 +221,36 @@ def test_round_base_consumption_uses_passo_leggero_when_coniglio_is_not_affamato
     assert players[1].lives == 11
 
 
+def test_round_logs_passo_leggero_consumption_animal_event():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 2),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    passo_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == CONIGLIO_PASSO_LEGGERO
+    ]
+    assert len(passo_events) == 1
+    event = passo_events[0]
+    assert event.effect_id == CONIGLIO_PASSO_LEGGERO
+    assert event.effect_name == "Passo Leggero"
+    assert event.timing == "consumption"
+    assert event.status == "applied"
+    assert event.player_id == 2
+    assert event.card_color == "RED"
+    assert event.card_value == 2
+    assert event.value_before == 2
+    assert event.value_after == 1
+
+
 def test_round_base_consumption_keeps_coniglio_two_standard_when_animals_disabled():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
@@ -266,6 +300,10 @@ def test_passo_leggero_does_not_make_affamato_coniglio_consume_one():
     assert result.critical_wound_players == [2]
     assert result.base_damage_by_player[2] == 0
     assert players[1].lives == 12
+    assert not any(
+        event.effect_id == CONIGLIO_PASSO_LEGGERO
+        for event in result.animal_events
+    )
 
 
 def test_round_affamato_uses_grande_balzo_effective_comparison_value():
@@ -284,6 +322,36 @@ def test_round_affamato_uses_grande_balzo_effective_comparison_value():
     assert result.critical_wound_players == [1]
     assert players[0].critical_wounds == 1
     assert players[1].critical_wounds == 0
+
+
+def test_round_logs_grande_balzo_comparison_animal_event():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 4),
+        2: Card(Color.RED, 4),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    balzo_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == CONIGLIO_GRANDE_BALZO
+    ]
+    assert len(balzo_events) == 1
+    event = balzo_events[0]
+    assert event.effect_id == CONIGLIO_GRANDE_BALZO
+    assert event.effect_name == "Grande Balzo"
+    assert event.timing == "comparison"
+    assert event.status == "applied"
+    assert event.player_id == 2
+    assert event.card_color == "RED"
+    assert event.card_value == 4
+    assert event.value_before == 4
+    assert event.value_after == 5
 
 
 def test_round_ties_coniglio_four_when_animal_effects_are_disabled():

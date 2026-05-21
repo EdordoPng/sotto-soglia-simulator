@@ -19,8 +19,14 @@ from sotto_soglia.config import GameConfig
 from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
 from sotto_soglia.animal_effects import (
     AnimalEffectEvent,
+    CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
+    PANDA_RESPIRO_LENTO,
     PANDA_RIPOSO_FORZATO,
+    SCOIATTOLO_DISPENSA_ORDINATA,
+    SCOIATTOLO_GHIANDA_NASCOSTA,
+    SCOIATTOLO_PICCOLA_RISERVA,
 )
 from sotto_soglia.game import GameResult
 from sotto_soglia.round import RoundResult
@@ -487,3 +493,134 @@ def test_animal_effect_events_csv_exports_multiple_events_and_games(tmp_path):
     assert all(row["timing"] == "recovery_schedule" for row in riposo_rows)
     assert all(row["status"] == "scheduled" for row in riposo_rows)
     assert all(row["amount"] == "1" for row in riposo_rows)
+
+
+def test_animal_effect_events_csv_exports_k2_and_k6_effects(tmp_path):
+    events = [
+        AnimalEffectEvent(
+            player_id=1,
+            animal="Panda",
+            card_color="BLUE",
+            card_value=1,
+            effect_id=PANDA_RIPOSO_FORZATO,
+            effect_name="Riposo Forzato",
+            timing="recovery_schedule",
+            status="scheduled",
+            amount=1,
+        ),
+        AnimalEffectEvent(
+            player_id=2,
+            animal="Coniglio",
+            card_color="RED",
+            card_value=1,
+            effect_id=CONIGLIO_SCATTO_IMPROVVISO,
+            effect_name="Scatto Improvviso",
+            timing="comparison",
+            status="applied",
+            value_before=1,
+            value_after=2,
+        ),
+        AnimalEffectEvent(
+            player_id=4,
+            animal="Scoiattolo",
+            card_color="YELLOW",
+            card_value=1,
+            effect_id=SCOIATTOLO_GHIANDA_NASCOSTA,
+            effect_name="Ghianda Nascosta",
+            timing="next_round_schedule",
+            status="scheduled",
+            amount=1,
+        ),
+        AnimalEffectEvent(
+            player_id=4,
+            animal="Scoiattolo",
+            card_color="YELLOW",
+            card_value=4,
+            effect_id=SCOIATTOLO_DISPENSA_ORDINATA,
+            effect_name="Dispensa Ordinata",
+            timing="next_round_schedule",
+            status="scheduled",
+            amount=1,
+        ),
+        AnimalEffectEvent(
+            player_id=2,
+            animal="Coniglio",
+            card_color="RED",
+            card_value=2,
+            effect_id=CONIGLIO_PASSO_LEGGERO,
+            effect_name="Passo Leggero",
+            timing="consumption",
+            status="applied",
+            value_before=2,
+            value_after=1,
+        ),
+        AnimalEffectEvent(
+            player_id=2,
+            animal="Coniglio",
+            card_color="RED",
+            card_value=4,
+            effect_id=CONIGLIO_GRANDE_BALZO,
+            effect_name="Grande Balzo",
+            timing="comparison",
+            status="applied",
+            value_before=4,
+            value_after=5,
+        ),
+        AnimalEffectEvent(
+            player_id=1,
+            animal="Panda",
+            card_color="BLUE",
+            card_value=3,
+            effect_id=PANDA_RESPIRO_LENTO,
+            effect_name="Respiro Lento",
+            timing="consumption",
+            status="applied",
+            value_before=3,
+            value_after=2,
+            amount=1,
+        ),
+        AnimalEffectEvent(
+            player_id=4,
+            animal="Scoiattolo",
+            card_color="YELLOW",
+            card_value=3,
+            effect_id=SCOIATTOLO_PICCOLA_RISERVA,
+            effect_name="Piccola Riserva",
+            timing="recovery_schedule",
+            status="scheduled",
+            amount=1,
+        ),
+    ]
+    simulation = SimulationResult(
+        players_count=4,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[
+                    RoundResult(round_number=1, animal_events=events),
+                ],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == len(events)
+    assert {row["effect_id"] for row in rows} == {
+        CONIGLIO_GRANDE_BALZO,
+        CONIGLIO_PASSO_LEGGERO,
+        CONIGLIO_SCATTO_IMPROVVISO,
+        PANDA_RESPIRO_LENTO,
+        PANDA_RIPOSO_FORZATO,
+        SCOIATTOLO_DISPENSA_ORDINATA,
+        SCOIATTOLO_GHIANDA_NASCOSTA,
+        SCOIATTOLO_PICCOLA_RISERVA,
+    }

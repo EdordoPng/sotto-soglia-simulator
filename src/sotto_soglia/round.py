@@ -7,9 +7,12 @@ from random import Random
 from sotto_soglia.animal_effects import (
     ANIMAL_DISPLAY_NAMES,
     AnimalEffectEvent,
+    CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_PASSO_LEGGERO,
+    CONIGLIO_SCATTO_IMPROVVISO,
     PANDA_GRANDE_LETARGO,
     PANDA_RIPOSO_FORZATO,
-    CONIGLIO_SCATTO_IMPROVVISO,
+    PANDA_RESPIRO_LENTO,
     SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
@@ -171,7 +174,7 @@ def resolve_round(
         )
         for player_id, card in selected_cards.items()
     }
-    animal_events = _collect_scatto_improvviso_events(
+    animal_events = _collect_comparison_animal_events(
         player_map,
         selected_cards,
         config,
@@ -263,6 +266,7 @@ def resolve_round(
             critical_events=critical_events,
             game_id=game_id,
             round_number=round_number,
+            animal_events=animal_events,
         )
         for player_id, card in selected_cards.items()
     }
@@ -536,29 +540,33 @@ def _animal_event(
     )
 
 
-def _collect_scatto_improvviso_events(
+def _collect_comparison_animal_events(
     player_map: Mapping[int, PlayerState],
     selected_cards: Mapping[int, Card],
     config: GameConfig,
     effective_comparison_values: Mapping[int, int],
 ) -> list[AnimalEffectEvent]:
-    """Collect K2 telemetry for Scatto Improvviso comparison changes."""
+    """Collect telemetry for animal effects that change comparison values."""
 
     animal_events: list[AnimalEffectEvent] = []
+    comparison_effect_names = {
+        CONIGLIO_SCATTO_IMPROVVISO: "Scatto Improvviso",
+        CONIGLIO_GRANDE_BALZO: "Grande Balzo",
+    }
     for player_id, card in selected_cards.items():
         player = player_map[player_id]
         effect_id = get_active_own_animal_effect_id(player, card, config)
         effective_value = effective_comparison_values[player_id]
         if (
-            effect_id == CONIGLIO_SCATTO_IMPROVVISO
+            effect_id in comparison_effect_names
             and effective_value != card.comparison_value
         ):
             animal_events.append(
                 _animal_event(
                     player=player,
                     card=card,
-                    effect_id=CONIGLIO_SCATTO_IMPROVVISO,
-                    effect_name="Scatto Improvviso",
+                    effect_id=effect_id,
+                    effect_name=comparison_effect_names[effect_id],
                     timing="comparison",
                     status="applied",
                     value_before=card.comparison_value,
@@ -567,6 +575,46 @@ def _collect_scatto_improvviso_events(
             )
 
     return animal_events
+
+
+def _collect_consumption_animal_event(
+    player: PlayerState,
+    card: Card,
+    config: GameConfig,
+    value_before: int,
+    value_after: int,
+    animal_events: list[AnimalEffectEvent],
+) -> None:
+    """Collect telemetry for animal effects that change base consumption."""
+
+    effect_id = get_active_own_animal_effect_id(player, card, config)
+    if effect_id == CONIGLIO_PASSO_LEGGERO and value_after != value_before:
+        animal_events.append(
+            _animal_event(
+                player=player,
+                card=card,
+                effect_id=CONIGLIO_PASSO_LEGGERO,
+                effect_name="Passo Leggero",
+                timing="consumption",
+                status="applied",
+                value_before=value_before,
+                value_after=value_after,
+            )
+        )
+    elif effect_id == PANDA_RESPIRO_LENTO and value_after != value_before:
+        animal_events.append(
+            _animal_event(
+                player=player,
+                card=card,
+                effect_id=PANDA_RESPIRO_LENTO,
+                effect_name="Respiro Lento",
+                timing="consumption",
+                status="applied",
+                value_before=value_before,
+                value_after=value_after,
+                amount=1,
+            )
+        )
 
 
 def _apply_animal_comparison_effects(
@@ -657,6 +705,17 @@ def _schedule_animal_life_recoveries(
             and player_id not in critical_wound_player_ids
         ):
             schedule_life_recovery(pending_life_recoveries, player_id, 1)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=SCOIATTOLO_PICCOLA_RISERVA,
+                    effect_name="Piccola Riserva",
+                    timing="recovery_schedule",
+                    status="scheduled",
+                    amount=1,
+                )
+            )
 
 
 def _schedule_next_round_animal_effects(
@@ -1044,6 +1103,7 @@ def _calculate_base_damage_with_critical_effects(
     critical_events: list[CriticalCardEvent],
     game_id: int,
     round_number: int,
+    animal_events: list[AnimalEffectEvent],
 ) -> int:
     """Calculate base damage with supported next-round critical effects."""
 
@@ -1060,7 +1120,16 @@ def _calculate_base_damage_with_critical_effects(
             )
         return 0
 
+    base_consumption = card.consumption_value
     damage = get_effective_consumption_value(player, card, config)
+    _collect_consumption_animal_event(
+        player=player,
+        card=card,
+        config=config,
+        value_before=base_consumption,
+        value_after=damage,
+        animal_events=animal_events,
+    )
     if RAZIONE_RISPARMIATA in active_effects:
         before = damage
         damage = max(1, damage - 1)
