@@ -360,7 +360,12 @@ def resolve_round(
     if config.critical_card_effects_enabled:
         _consume_active_critical_effects(player_map, active_effects_by_player)
     if config.animal_card_effects_enabled:
-        _consume_active_animal_effects(player_map, active_animal_effects_by_player)
+        _consume_active_animal_effects(
+            player_map,
+            active_animal_effects_by_player,
+            selected_cards,
+            animal_events,
+        )
 
     lives_after = {
         player_id: player.lives
@@ -555,8 +560,27 @@ def _collect_comparison_animal_events(
     }
     for player_id, card in selected_cards.items():
         player = player_map[player_id]
-        effect_id = get_active_own_animal_effect_id(player, card, config)
         effective_value = effective_comparison_values[player_id]
+        if (
+            config.animal_card_effects_enabled
+            and PANDA_GRANDE_LETARGO in player.active_animal_effects
+            and effective_value == 3
+        ):
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=PANDA_GRANDE_LETARGO,
+                    effect_name="Grande Letargo",
+                    timing="comparison",
+                    status="applied",
+                    value_before=card.comparison_value,
+                    value_after=effective_value,
+                )
+            )
+            continue
+
+        effect_id = get_active_own_animal_effect_id(player, card, config)
         if (
             effect_id in comparison_effect_names
             and effective_value != card.comparison_value
@@ -732,6 +756,16 @@ def _schedule_next_round_animal_effects(
         effect_id = get_active_own_animal_effect_id(player, card, config)
         if effect_id == PANDA_GRANDE_LETARGO:
             player.active_animal_effects.append(PANDA_GRANDE_LETARGO)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=PANDA_GRANDE_LETARGO,
+                    effect_name="Grande Letargo",
+                    timing="next_round_schedule",
+                    status="scheduled",
+                )
+            )
         elif effect_id == SCOIATTOLO_GHIANDA_NASCOSTA:
             player.active_animal_effects.append(SCOIATTOLO_GHIANDA_NASCOSTA)
             animal_events.append(
@@ -1417,6 +1451,8 @@ def _consume_active_critical_effects(
 def _consume_active_animal_effects(
     player_map: dict[int, PlayerState],
     active_effects_by_player: Mapping[int, list[str]],
+    selected_cards: Mapping[int, Card],
+    animal_events: list[AnimalEffectEvent],
 ) -> None:
     """Consume animal effects that were active at the start of the round."""
 
@@ -1425,3 +1461,14 @@ def _consume_active_animal_effects(
         for effect_id in effects:
             if effect_id in player.active_animal_effects:
                 player.active_animal_effects.remove(effect_id)
+                if effect_id == PANDA_GRANDE_LETARGO and player_id in selected_cards:
+                    animal_events.append(
+                        _animal_event(
+                            player=player,
+                            card=selected_cards[player_id],
+                            effect_id=PANDA_GRANDE_LETARGO,
+                            effect_name="Grande Letargo",
+                            timing="next_round_consume",
+                            status="consumed",
+                        )
+                    )

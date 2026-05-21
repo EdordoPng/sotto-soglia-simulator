@@ -359,6 +359,20 @@ def test_grande_letargo_registers_next_round_without_changing_current_comparison
     assert result.critical_wound_players == [1, 2]
     assert players[0].active_animal_effects == [PANDA_GRANDE_LETARGO]
     assert result.base_damage_by_player[1] == 0
+    letargo_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_GRANDE_LETARGO
+    ]
+    assert len(letargo_events) == 1
+    event = letargo_events[0]
+    assert event.effect_id == PANDA_GRANDE_LETARGO
+    assert event.effect_name == "Grande Letargo"
+    assert event.timing == "next_round_schedule"
+    assert event.status == "scheduled"
+    assert event.player_id == 1
+    assert event.card_color == "BLUE"
+    assert event.card_value == 5
 
 
 def test_grande_letargo_registers_even_when_panda_receives_affamato():
@@ -376,6 +390,12 @@ def test_grande_letargo_registers_even_when_panda_receives_affamato():
     assert 1 in result.critical_wound_players
     assert result.base_damage_by_player[1] == 0
     assert players[0].active_animal_effects == [PANDA_GRANDE_LETARGO]
+    assert any(
+        event.effect_id == PANDA_GRANDE_LETARGO
+        and event.timing == "next_round_schedule"
+        and event.status == "scheduled"
+        for event in result.animal_events
+    )
 
 
 def test_grande_letargo_active_sets_panda_five_comparison_to_three_and_keeps_consumption():
@@ -391,6 +411,42 @@ def test_grande_letargo_active_sets_panda_five_comparison_to_three_and_keeps_con
     assert get_effective_consumption_value(player, card, _animal_config()) == 5
 
 
+def test_grande_letargo_logs_applied_for_panda_five():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_animal_effects=[PANDA_GRANDE_LETARGO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 5),
+            2: Card(Color.RED, 4),
+        },
+        _animal_config(),
+    )
+
+    applied_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_GRANDE_LETARGO
+        and event.timing == "comparison"
+        and event.status == "applied"
+    ]
+    assert len(applied_events) == 1
+    event = applied_events[0]
+    assert event.player_id == 1
+    assert event.card_color == "BLUE"
+    assert event.card_value == 5
+    assert event.value_before == 5
+    assert event.value_after == 3
+
+
 def test_grande_letargo_active_sets_panda_one_comparison_to_three_and_keeps_consumption():
     player = PlayerState(
         player_id=1,
@@ -404,6 +460,41 @@ def test_grande_letargo_active_sets_panda_one_comparison_to_three_and_keeps_cons
     assert get_effective_consumption_value(player, card, _animal_config()) == 1
 
 
+def test_grande_letargo_logs_applied_for_panda_one():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_animal_effects=[PANDA_GRANDE_LETARGO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+        },
+        _animal_config(),
+    )
+
+    applied_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_GRANDE_LETARGO
+        and event.timing == "comparison"
+        and event.status == "applied"
+    ]
+    assert len(applied_events) == 1
+    event = applied_events[0]
+    assert event.card_color == "BLUE"
+    assert event.card_value == 1
+    assert event.value_before == 1
+    assert event.value_after == 3
+
+
 def test_grande_letargo_active_applies_to_non_panda_card_without_grande_balzo():
     player = PlayerState(
         player_id=1,
@@ -415,6 +506,41 @@ def test_grande_letargo_active_applies_to_non_panda_card_without_grande_balzo():
 
     assert get_effective_comparison_value(player, card, _animal_config()) == 3
     assert get_effective_consumption_value(player, card, _animal_config()) == 4
+
+
+def test_grande_letargo_logs_applied_for_non_panda_card():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_animal_effects=[PANDA_GRANDE_LETARGO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.RED, 4),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    applied_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_GRANDE_LETARGO
+        and event.timing == "comparison"
+        and event.status == "applied"
+    ]
+    assert len(applied_events) == 1
+    event = applied_events[0]
+    assert event.card_color == "RED"
+    assert event.card_value == 4
+    assert event.value_before == 4
+    assert event.value_after == 3
 
 
 def test_grande_letargo_is_consumed_after_next_round():
@@ -437,6 +563,18 @@ def test_grande_letargo_is_consumed_after_next_round():
     assert result.lowest_value == 1
     assert result.base_damage_by_player[1] == 2
     assert players[0].active_animal_effects == []
+    consumed_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == PANDA_GRANDE_LETARGO
+        and event.timing == "next_round_consume"
+        and event.status == "consumed"
+    ]
+    assert len(consumed_events) == 1
+    event = consumed_events[0]
+    assert event.player_id == 1
+    assert event.card_color == "BLUE"
+    assert event.card_value == 2
 
 
 def test_grande_letargo_does_not_apply_twice():
@@ -522,9 +660,13 @@ def test_grande_letargo_is_inactive_when_other_animals_play_panda_five():
             2: Card(Color.RED, 1),
         }
 
-        resolve_round(players, selected_cards, _animal_config())
+        result = resolve_round(players, selected_cards, _animal_config())
 
         assert players[0].active_animal_effects == []
+        assert not any(
+            event.effect_id == PANDA_GRANDE_LETARGO
+            for event in result.animal_events
+        )
 
 
 def test_grande_letargo_is_inactive_when_animal_effects_are_disabled():

@@ -22,6 +22,7 @@ from sotto_soglia.animal_effects import (
     CONIGLIO_GRANDE_BALZO,
     CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
+    PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
     PANDA_RIPOSO_FORZATO,
     SCOIATTOLO_DISPENSA_ORDINATA,
@@ -624,3 +625,68 @@ def test_animal_effect_events_csv_exports_k2_and_k6_effects(tmp_path):
         SCOIATTOLO_GHIANDA_NASCOSTA,
         SCOIATTOLO_PICCOLA_RISERVA,
     }
+
+
+def test_animal_effect_events_csv_exports_grande_letargo_events(tmp_path):
+    events = [
+        AnimalEffectEvent(
+            player_id=1,
+            animal="Panda",
+            card_color="BLUE",
+            card_value=5,
+            effect_id=PANDA_GRANDE_LETARGO,
+            effect_name="Grande Letargo",
+            timing="next_round_schedule",
+            status="scheduled",
+        ),
+        AnimalEffectEvent(
+            player_id=1,
+            animal="Panda",
+            card_color="RED",
+            card_value=4,
+            effect_id=PANDA_GRANDE_LETARGO,
+            effect_name="Grande Letargo",
+            timing="comparison",
+            status="applied",
+            value_before=4,
+            value_after=3,
+        ),
+        AnimalEffectEvent(
+            player_id=1,
+            animal="Panda",
+            card_color="RED",
+            card_value=4,
+            effect_id=PANDA_GRANDE_LETARGO,
+            effect_name="Grande Letargo",
+            timing="next_round_consume",
+            status="consumed",
+        ),
+    ]
+    simulation = SimulationResult(
+        players_count=2,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[RoundResult(round_number=2, animal_events=events)],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == 3
+    rows_by_timing = {row["timing"]: row for row in rows}
+    assert rows_by_timing["next_round_schedule"]["status"] == "scheduled"
+    assert rows_by_timing["comparison"]["status"] == "applied"
+    assert rows_by_timing["comparison"]["value_before"] == "4"
+    assert rows_by_timing["comparison"]["value_after"] == "3"
+    assert rows_by_timing["next_round_consume"]["status"] == "consumed"
+    assert {row["effect_id"] for row in rows} == {PANDA_GRANDE_LETARGO}
