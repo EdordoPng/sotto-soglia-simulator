@@ -17,11 +17,38 @@ from sotto_soglia.critical import (
 )
 from sotto_soglia.config import GameConfig
 from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
-from sotto_soglia.simulation import SimulationRunner
+from sotto_soglia.animal_effects import (
+    AnimalEffectEvent,
+    CONIGLIO_SCATTO_IMPROVVISO,
+    PANDA_RIPOSO_FORZATO,
+)
+from sotto_soglia.game import GameResult
+from sotto_soglia.round import RoundResult
+from sotto_soglia.simulation import SimulationResult, SimulationRunner
 
 
 def _small_simulation():
     return SimulationRunner().run(players_count=4, games_count=5, seed=42)
+
+
+ANIMAL_EFFECT_EVENT_FIELDS = [
+    "game_index",
+    "round_number",
+    "player_id",
+    "animal",
+    "card_color",
+    "card_value",
+    "effect_id",
+    "effect_name",
+    "timing",
+    "status",
+    "target_player_id",
+    "value_before",
+    "value_after",
+    "amount",
+    "actual_amount",
+    "reason",
+]
 
 
 def test_export_creates_expected_files(tmp_path):
@@ -33,6 +60,7 @@ def test_export_creates_expected_files(tmp_path):
     assert exported_files["aggregate_stats"].exists()
     assert exported_files["games_summary"].exists()
     assert exported_files["rounds_summary"].exists()
+    assert exported_files["animal_effect_events"].exists()
 
 
 def test_aggregate_stats_json_is_valid(tmp_path):
@@ -67,6 +95,9 @@ def test_simulation_config_json_is_valid(tmp_path):
     assert data["sono_ancora_qui_variant"] == "single_2"
     assert "generated_files" in data
     assert data["generated_files"]["games_summary"] == "games_summary.csv"
+    assert data["generated_files"]["animal_effect_events"] == (
+        "animal_effect_events.csv"
+    )
     assert data["generated_files"]["critical_events"] == "critical_events.csv"
     assert data["generated_files"]["critical_deck_orders"] == "critical_deck_orders.csv"
     assert data["generated_files"]["critical_card_stats"] == "critical_card_stats.csv"
@@ -291,3 +322,168 @@ def test_rounds_summary_csv_is_valid(tmp_path):
         "eliminated_players",
     ]:
         assert column in rows[0]
+
+
+def test_animal_effect_events_csv_is_created_with_header_when_empty(tmp_path):
+    simulation = SimulationResult(
+        players_count=2,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[RoundResult(round_number=1)],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        reader = csv.DictReader(file, delimiter=CSV_DELIMITER)
+        rows = list(reader)
+
+    assert reader.fieldnames == ANIMAL_EFFECT_EVENT_FIELDS
+    assert rows == []
+
+
+def test_animal_effect_events_csv_exports_scatto_improvviso(tmp_path):
+    simulation = SimulationResult(
+        players_count=2,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[
+                    RoundResult(
+                        round_number=1,
+                        animal_events=[
+                            AnimalEffectEvent(
+                                player_id=2,
+                                animal="Coniglio",
+                                card_color="RED",
+                                card_value=1,
+                                effect_id=CONIGLIO_SCATTO_IMPROVVISO,
+                                effect_name="Scatto Improvviso",
+                                timing="comparison",
+                                status="applied",
+                                value_before=1,
+                                value_after=2,
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["game_index"] == "1"
+    assert row["round_number"] == "1"
+    assert row["effect_id"] == CONIGLIO_SCATTO_IMPROVVISO
+    assert row["effect_name"] == "Scatto Improvviso"
+    assert row["player_id"] == "2"
+    assert row["card_color"] == "RED"
+    assert row["card_value"] == "1"
+    assert row["timing"] == "comparison"
+    assert row["status"] == "applied"
+    assert row["value_before"] == "1"
+    assert row["value_after"] == "2"
+
+
+def test_animal_effect_events_csv_exports_multiple_events_and_games(tmp_path):
+    simulation = SimulationResult(
+        players_count=2,
+        games_count=2,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[
+                    RoundResult(
+                        round_number=1,
+                        animal_events=[
+                            AnimalEffectEvent(
+                                player_id=1,
+                                animal="Panda",
+                                card_color="BLUE",
+                                card_value=1,
+                                effect_id=PANDA_RIPOSO_FORZATO,
+                                effect_name="Riposo Forzato",
+                                timing="recovery_schedule",
+                                status="scheduled",
+                                amount=1,
+                            ),
+                            AnimalEffectEvent(
+                                player_id=2,
+                                animal="Coniglio",
+                                card_color="RED",
+                                card_value=1,
+                                effect_id=CONIGLIO_SCATTO_IMPROVVISO,
+                                effect_name="Scatto Improvviso",
+                                timing="comparison",
+                                status="applied",
+                                value_before=1,
+                                value_after=2,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+            GameResult(
+                game_id=2,
+                round_history=[
+                    RoundResult(
+                        round_number=2,
+                        animal_events=[
+                            AnimalEffectEvent(
+                                player_id=1,
+                                animal="Panda",
+                                card_color="BLUE",
+                                card_value=1,
+                                effect_id=PANDA_RIPOSO_FORZATO,
+                                effect_name="Riposo Forzato",
+                                timing="recovery_schedule",
+                                status="scheduled",
+                                amount=1,
+                            )
+                        ],
+                    )
+                ],
+            ),
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == 3
+    assert [row["game_index"] for row in rows] == ["1", "1", "2"]
+    assert [row["round_number"] for row in rows] == ["1", "1", "2"]
+    riposo_rows = [
+        row
+        for row in rows
+        if row["effect_id"] == PANDA_RIPOSO_FORZATO
+    ]
+    assert len(riposo_rows) == 2
+    assert all(row["timing"] == "recovery_schedule" for row in riposo_rows)
+    assert all(row["status"] == "scheduled" for row in riposo_rows)
+    assert all(row["amount"] == "1" for row in riposo_rows)

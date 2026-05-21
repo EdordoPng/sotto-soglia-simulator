@@ -31,6 +31,7 @@ def export_simulation_result(
         "aggregate_stats": output_path / "aggregate_stats.json",
         "games_summary": output_path / "games_summary.csv",
         "rounds_summary": output_path / "rounds_summary.csv",
+        "animal_effect_events": output_path / "animal_effect_events.csv",
     }
     if simulation_result.critical_card_effects_enabled:
         paths.update(
@@ -67,6 +68,7 @@ def export_simulation_result(
     write_json(paths["aggregate_stats"], simulation_result.aggregate_stats)
     write_games_summary_csv(paths["games_summary"], simulation_result)
     write_rounds_summary_csv(paths["rounds_summary"], simulation_result)
+    write_animal_effect_events_csv(paths["animal_effect_events"], simulation_result)
     if simulation_result.critical_card_effects_enabled:
         write_critical_events_csv(paths["critical_events"], simulation_result)
         write_critical_deck_orders_csv(paths["critical_deck_orders"], simulation_result)
@@ -504,6 +506,62 @@ def write_critical_card_stats_csv(
             )
 
 
+def write_animal_effect_events_csv(
+    path: str | Path,
+    simulation_result: SimulationResult,
+) -> None:
+    """Write one row per internal animal-card effect event."""
+
+    fieldnames = [
+        "game_index",
+        "round_number",
+        "player_id",
+        "animal",
+        "card_color",
+        "card_value",
+        "effect_id",
+        "effect_name",
+        "timing",
+        "status",
+        "target_player_id",
+        "value_before",
+        "value_after",
+        "amount",
+        "actual_amount",
+        "reason",
+    ]
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for game_result in simulation_result.game_results:
+            for round_result in game_result.round_history:
+                for event in round_result.animal_events:
+                    writer.writerow(
+                        {
+                            "game_index": game_result.game_id,
+                            "round_number": round_result.round_number,
+                            "player_id": event.player_id,
+                            "animal": event.animal,
+                            "card_color": event.card_color,
+                            "card_value": event.card_value,
+                            "effect_id": event.effect_id,
+                            "effect_name": event.effect_name,
+                            "timing": event.timing,
+                            "status": event.status,
+                            "target_player_id": _optional_csv_value(
+                                event.target_player_id
+                            ),
+                            "value_before": _optional_csv_value(event.value_before),
+                            "value_after": _optional_csv_value(event.value_after),
+                            "amount": _optional_csv_value(event.amount),
+                            "actual_amount": _optional_csv_value(event.actual_amount),
+                            "reason": _optional_csv_value(event.reason),
+                        }
+                    )
+
+
 def to_jsonable(value: Any) -> Any:
     """Convert common project objects into JSON-serializable values."""
 
@@ -554,6 +612,12 @@ def serialize_name_count_map(values: dict[str, int]) -> str:
         f"{name}:{count}"
         for name, count in sorted(values.items())
     )
+
+
+def _optional_csv_value(value: Any) -> Any:
+    """Serialize absent optional values as empty CSV cells."""
+
+    return "" if value is None else value
 
 
 def get_player_by_id(players: list[PlayerState]) -> dict[int, PlayerState]:
