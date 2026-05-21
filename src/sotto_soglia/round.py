@@ -5,14 +5,18 @@ from collections.abc import Iterable, Mapping
 from random import Random
 
 from sotto_soglia.animal_effects import (
+    ANIMAL_DISPLAY_NAMES,
+    AnimalEffectEvent,
     PANDA_GRANDE_LETARGO,
     PANDA_RIPOSO_FORZATO,
+    CONIGLIO_SCATTO_IMPROVVISO,
     SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
     SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
     SCOIATTOLO_PICCOLA_RISERVA,
+    get_animal_for_color,
 )
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
@@ -70,6 +74,7 @@ class RoundResult:
     critical_draw_order: list[int] = field(default_factory=list)
     critical_prevented_damage_by_player: dict[int, int] = field(default_factory=dict)
     critical_life_delta_by_player: dict[int, int] = field(default_factory=dict)
+    animal_events: list[AnimalEffectEvent] = field(default_factory=list)
 
     @property
     def damage_by_player(self) -> dict[int, int]:
@@ -166,6 +171,12 @@ def resolve_round(
         )
         for player_id, card in selected_cards.items()
     }
+    animal_events = _collect_scatto_improvviso_events(
+        player_map,
+        selected_cards,
+        config,
+        effective_comparison_values,
+    )
     _apply_animal_comparison_effects(
         player_map,
         selected_cards,
@@ -224,12 +235,14 @@ def resolve_round(
         config=config,
         critical_wound_player_ids=critical_wound_player_ids,
         pending_life_recoveries=pending_animal_life_recoveries,
+        animal_events=animal_events,
     )
     _schedule_next_round_animal_effects(
         player_map=player_map,
         selected_cards=selected_cards,
         config=config,
         critical_wound_player_ids=critical_wound_player_ids,
+        animal_events=animal_events,
     )
     _schedule_animal_extra_consumptions(
         player_map=player_map,
@@ -371,6 +384,7 @@ def resolve_round(
         critical_draw_order=critical_draw_order,
         critical_prevented_damage_by_player=prevented_damage_by_player,
         critical_life_delta_by_player=critical_life_delta_by_player,
+        animal_events=animal_events,
     )
 
 
@@ -488,6 +502,73 @@ def _draw_and_apply_critical_card(
         pending_life_recovery_events[player_id].append(event)
 
 
+def _animal_event(
+    player: PlayerState,
+    card: Card,
+    effect_id: str,
+    effect_name: str,
+    timing: str,
+    status: str,
+    target_player_id: int | None = None,
+    value_before: int | None = None,
+    value_after: int | None = None,
+    amount: int | None = None,
+    actual_amount: int | None = None,
+    reason: str | None = None,
+) -> AnimalEffectEvent:
+    """Build internal animal-effect telemetry for a played card."""
+
+    return AnimalEffectEvent(
+        player_id=player.player_id,
+        animal=ANIMAL_DISPLAY_NAMES[get_animal_for_color(player.color)],
+        card_color=card.color.name,
+        card_value=card.value,
+        effect_id=effect_id,
+        effect_name=effect_name,
+        timing=timing,
+        status=status,
+        target_player_id=target_player_id,
+        value_before=value_before,
+        value_after=value_after,
+        amount=amount,
+        actual_amount=actual_amount,
+        reason=reason,
+    )
+
+
+def _collect_scatto_improvviso_events(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+    effective_comparison_values: Mapping[int, int],
+) -> list[AnimalEffectEvent]:
+    """Collect K2 telemetry for Scatto Improvviso comparison changes."""
+
+    animal_events: list[AnimalEffectEvent] = []
+    for player_id, card in selected_cards.items():
+        player = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(player, card, config)
+        effective_value = effective_comparison_values[player_id]
+        if (
+            effect_id == CONIGLIO_SCATTO_IMPROVVISO
+            and effective_value != card.comparison_value
+        ):
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=CONIGLIO_SCATTO_IMPROVVISO,
+                    effect_name="Scatto Improvviso",
+                    timing="comparison",
+                    status="applied",
+                    value_before=card.comparison_value,
+                    value_after=effective_value,
+                )
+            )
+
+    return animal_events
+
+
 def _apply_animal_comparison_effects(
     player_map: Mapping[int, PlayerState],
     selected_cards: Mapping[int, Card],
@@ -551,6 +632,7 @@ def _schedule_animal_life_recoveries(
     config: GameConfig,
     critical_wound_player_ids: set[int],
     pending_life_recoveries: dict[int, int],
+    animal_events: list[AnimalEffectEvent],
 ) -> None:
     """Schedule same-round recovery from supported animal-card effects."""
 
@@ -559,6 +641,17 @@ def _schedule_animal_life_recoveries(
         effect_id = get_active_own_animal_effect_id(player, card, config)
         if effect_id == PANDA_RIPOSO_FORZATO:
             schedule_life_recovery(pending_life_recoveries, player_id, 1)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=PANDA_RIPOSO_FORZATO,
+                    effect_name="Riposo Forzato",
+                    timing="recovery_schedule",
+                    status="scheduled",
+                    amount=1,
+                )
+            )
         elif (
             effect_id == SCOIATTOLO_PICCOLA_RISERVA
             and player_id not in critical_wound_player_ids
@@ -571,6 +664,7 @@ def _schedule_next_round_animal_effects(
     selected_cards: Mapping[int, Card],
     config: GameConfig,
     critical_wound_player_ids: set[int],
+    animal_events: list[AnimalEffectEvent],
 ) -> None:
     """Register supported next-round animal-card effects."""
 
@@ -581,11 +675,33 @@ def _schedule_next_round_animal_effects(
             player.active_animal_effects.append(PANDA_GRANDE_LETARGO)
         elif effect_id == SCOIATTOLO_GHIANDA_NASCOSTA:
             player.active_animal_effects.append(SCOIATTOLO_GHIANDA_NASCOSTA)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=SCOIATTOLO_GHIANDA_NASCOSTA,
+                    effect_name="Ghianda Nascosta",
+                    timing="next_round_schedule",
+                    status="scheduled",
+                    amount=1,
+                )
+            )
         elif (
             effect_id == SCOIATTOLO_DISPENSA_ORDINATA
             and player_id not in critical_wound_player_ids
         ):
             player.active_animal_effects.append(SCOIATTOLO_DISPENSA_ORDINATA)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=SCOIATTOLO_DISPENSA_ORDINATA,
+                    effect_name="Dispensa Ordinata",
+                    timing="next_round_schedule",
+                    status="scheduled",
+                    amount=1,
+                )
+            )
 
 
 def _schedule_animal_extra_consumptions(

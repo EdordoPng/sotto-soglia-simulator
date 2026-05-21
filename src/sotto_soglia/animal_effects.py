@@ -63,6 +63,26 @@ class AnimalCardEffectProfile:
     timing: str | None = None
 
 
+@dataclass(frozen=True)
+class AnimalEffectEvent:
+    """Internal telemetry for one animal-card effect event."""
+
+    player_id: int
+    animal: str
+    card_color: str
+    card_value: int
+    effect_id: str
+    effect_name: str
+    timing: str
+    status: str
+    target_player_id: int | None = None
+    value_before: int | None = None
+    value_after: int | None = None
+    amount: int | None = None
+    actual_amount: int | None = None
+    reason: str | None = None
+
+
 def _profile(
     animal: Animal,
     printed_value: int,

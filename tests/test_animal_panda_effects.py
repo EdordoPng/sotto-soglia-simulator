@@ -10,7 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import RAZIONE_RISPARMIATA, V05_HUNGER_DECK_PROFILE_ID
-from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO
+from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO, PANDA_RIPOSO_FORZATO
 from sotto_soglia.models import Card, Color, EliminationReason, PlayerState
 import sotto_soglia.round as round_module
 from sotto_soglia.round import resolve_round
@@ -46,6 +46,27 @@ def test_riposo_forzato_recovers_one_in_recovery_phase():
     assert result.critical_wound_players == [1]
     assert result.base_damage_by_player[1] == 0
     assert players[0].lives == 11
+
+
+def test_riposo_forzato_logs_scheduled_animal_event():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=10),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 2),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert len(result.animal_events) == 1
+    event = result.animal_events[0]
+    assert event.effect_id == PANDA_RIPOSO_FORZATO
+    assert event.effect_name == "Riposo Forzato"
+    assert event.timing == "recovery_schedule"
+    assert event.status == "scheduled"
+    assert event.amount == 1
 
 
 def test_riposo_forzato_does_not_recover_before_recovery_phase(monkeypatch):

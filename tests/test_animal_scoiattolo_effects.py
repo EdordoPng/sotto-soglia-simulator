@@ -71,6 +71,13 @@ def test_ghianda_nascosta_registers_next_round_without_current_hand_change():
     assert result.critical_wound_players == [1]
     assert result.base_damage_by_player[1] == 0
     assert players[0].active_animal_effects == [SCOIATTOLO_GHIANDA_NASCOSTA]
+    assert len(result.animal_events) == 1
+    event = result.animal_events[0]
+    assert event.effect_id == SCOIATTOLO_GHIANDA_NASCOSTA
+    assert event.effect_name == "Ghianda Nascosta"
+    assert event.timing == "next_round_schedule"
+    assert event.status == "scheduled"
+    assert event.amount == 1
 
     hand_sizes, events = _hand_sizes_from_critical_effects(
         players,
@@ -612,6 +619,21 @@ def test_dispensa_ordinata_registers_next_round_when_not_affamato():
 
     assert result.critical_wound_players == [2]
     assert players[0].active_animal_effects == [SCOIATTOLO_DISPENSA_ORDINATA]
+    dispensa_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCOIATTOLO_DISPENSA_ORDINATA
+    ]
+    assert len(dispensa_events) == 1
+    event = dispensa_events[0]
+    assert event.effect_id == SCOIATTOLO_DISPENSA_ORDINATA
+    assert event.effect_name == "Dispensa Ordinata"
+    assert event.timing == "next_round_schedule"
+    assert event.status == "scheduled"
+    assert event.player_id == 1
+    assert event.card_color == "YELLOW"
+    assert event.card_value == 4
+    assert event.amount == 1
 
 
 def test_dispensa_ordinata_does_not_register_when_scoiattolo_receives_affamato():
@@ -632,6 +654,7 @@ def test_dispensa_ordinata_does_not_register_when_scoiattolo_receives_affamato()
     assert result.critical_wound_players == [1, 2]
     assert result.base_damage_by_player[1] == 0
     assert players[0].active_animal_effects == []
+    assert result.animal_events == []
 
 
 def test_dispensa_ordinata_does_not_change_current_round_hand():

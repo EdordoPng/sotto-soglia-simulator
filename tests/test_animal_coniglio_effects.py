@@ -10,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import BRICIOLA_NASCOSTA, V05_HUNGER_DECK_PROFILE_ID
+from sotto_soglia.animal_effects import CONIGLIO_SCATTO_IMPROVVISO
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import resolve_round
 from sotto_soglia.rules import (
@@ -133,6 +134,70 @@ def test_round_affamato_uses_scatto_improvviso_effective_comparison_value():
     assert result.critical_wound_players == [1]
     assert players[0].critical_wounds == 1
     assert players[1].critical_wounds == 0
+
+
+def test_round_result_has_empty_animal_events_without_tracked_effects():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 2),
+        2: Card(Color.RED, 3),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.animal_events == []
+
+
+def test_round_logs_scatto_improvviso_animal_event():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 1),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    scatto_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == CONIGLIO_SCATTO_IMPROVVISO
+    ]
+    assert len(scatto_events) == 1
+    event = scatto_events[0]
+    assert event.effect_id == CONIGLIO_SCATTO_IMPROVVISO
+    assert event.effect_name == "Scatto Improvviso"
+    assert event.timing == "comparison"
+    assert event.status == "applied"
+    assert event.player_id == 2
+    assert event.card_color == "RED"
+    assert event.card_value == 1
+    assert event.value_before == 1
+    assert event.value_after == 2
+
+
+def test_round_does_not_log_scatto_improvviso_when_animals_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 1),
+    }
+
+    result = resolve_round(
+        players,
+        selected_cards,
+        GameConfig(color_effects_enabled=False),
+    )
+
+    assert result.animal_events == []
 
 
 def test_round_base_consumption_uses_passo_leggero_when_coniglio_is_not_affamato():
