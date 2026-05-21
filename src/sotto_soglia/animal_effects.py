@@ -37,6 +37,13 @@ ANIMAL_DISPLAY_NAMES: dict[Animal, str] = {
     Animal.SCOIATTOLO: "Scoiattolo",
 }
 
+ANIMAL_DISPLAY_COLORS: dict[Animal, str] = {
+    Animal.PANDA: "green",
+    Animal.CONIGLIO: "orange",
+    Animal.SCIMMIA: "yellow",
+    Animal.SCOIATTOLO: "brown",
+}
+
 PANDA_RIPOSO_FORZATO = "panda_riposo_forzato"
 PANDA_RESPIRO_LENTO = "panda_respiro_lento"
 PANDA_GRANDE_LETARGO = "panda_grande_letargo"
@@ -190,6 +197,18 @@ def get_animal_for_color(color: Color) -> Animal:
     """Return the v0.5 animal mapped to a technical color."""
 
     return ANIMAL_BY_COLOR[color]
+
+
+def get_display_color_for_animal(animal: Animal) -> str:
+    """Return the physical game color displayed for an animal."""
+
+    return ANIMAL_DISPLAY_COLORS[animal]
+
+
+def get_display_color_for_technical_color(color: Color) -> str:
+    """Return the physical display color for a legacy technical color."""
+
+    return get_display_color_for_animal(get_animal_for_color(color))
 
 
 def get_animal_card_profile(card: Card) -> AnimalCardEffectProfile | None:

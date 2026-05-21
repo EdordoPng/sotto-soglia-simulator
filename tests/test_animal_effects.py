@@ -10,7 +10,11 @@ if str(SRC_PATH) not in sys.path:
 from sotto_soglia.animal_effects import (
     ANIMAL_CARD_EFFECTS,
     ANIMAL_BY_COLOR,
+    ANIMAL_DISPLAY_COLORS,
+    COLOR_BY_ANIMAL as TECHNICAL_COLOR_BY_ANIMAL,
     Animal,
+    get_display_color_for_animal,
+    get_display_color_for_technical_color,
     get_animal_card_effect,
     get_animal_card_profile,
     get_effect_id_for_card,
@@ -55,6 +59,35 @@ EXPECTED_NO_EFFECT = {
 }
 
 
+EXPECTED_TECHNICAL_ANIMAL_BY_COLOR = {
+    Color.BLUE: Animal.PANDA,
+    Color.RED: Animal.CONIGLIO,
+    Color.GREEN: Animal.SCIMMIA,
+    Color.YELLOW: Animal.SCOIATTOLO,
+}
+
+EXPECTED_TECHNICAL_COLOR_BY_ANIMAL = {
+    Animal.PANDA: Color.BLUE,
+    Animal.CONIGLIO: Color.RED,
+    Animal.SCIMMIA: Color.GREEN,
+    Animal.SCOIATTOLO: Color.YELLOW,
+}
+
+EXPECTED_DISPLAY_COLORS_BY_ANIMAL = {
+    Animal.PANDA: "green",
+    Animal.SCIMMIA: "yellow",
+    Animal.CONIGLIO: "orange",
+    Animal.SCOIATTOLO: "brown",
+}
+
+EXPECTED_DISPLAY_COLORS_BY_TECHNICAL_COLOR = {
+    Color.BLUE: "green",
+    Color.GREEN: "yellow",
+    Color.RED: "orange",
+    Color.YELLOW: "brown",
+}
+
+
 def _card(animal: Animal, value: int) -> Card:
     return Card(COLOR_BY_ANIMAL[animal], value)
 
@@ -65,6 +98,31 @@ def _player(animal: Animal) -> PlayerState:
         color=COLOR_BY_ANIMAL[animal],
         lives=12,
     )
+
+
+def test_display_color_mapping_by_animal():
+    assert ANIMAL_DISPLAY_COLORS == EXPECTED_DISPLAY_COLORS_BY_ANIMAL
+
+    for animal, display_color in EXPECTED_DISPLAY_COLORS_BY_ANIMAL.items():
+        assert get_display_color_for_animal(animal) == display_color
+
+
+def test_display_color_mapping_by_technical_color():
+    for color, display_color in EXPECTED_DISPLAY_COLORS_BY_TECHNICAL_COLOR.items():
+        assert get_display_color_for_technical_color(color) == display_color
+
+
+def test_technical_animal_mapping_remains_unchanged():
+    assert ANIMAL_BY_COLOR == EXPECTED_TECHNICAL_ANIMAL_BY_COLOR
+
+
+def test_technical_color_by_animal_mapping_remains_unchanged():
+    assert TECHNICAL_COLOR_BY_ANIMAL == EXPECTED_TECHNICAL_COLOR_BY_ANIMAL
+
+
+def test_display_color_mapping_does_not_change_effect_recognition():
+    assert get_effect_id_for_card(Card(Color.BLUE, 1)) == "panda_riposo_forzato"
+    assert get_display_color_for_technical_color(Color.BLUE) == "green"
 
 
 def test_all_twenty_animal_cards_are_represented():
