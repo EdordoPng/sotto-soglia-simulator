@@ -7,6 +7,7 @@ from random import Random
 from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
     PANDA_RIPOSO_FORZATO,
+    SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
 )
 from sotto_soglia.config import GameConfig
@@ -82,6 +83,7 @@ class PendingExtraConsumption:
     amount: int
     effect_id: str
     event: CriticalCardEvent | None = None
+    recovery_player_id: int | None = None
 
 
 def _players_by_id(
@@ -216,6 +218,13 @@ def resolve_round(
         selected_cards=selected_cards,
         config=config,
     )
+    _schedule_animal_extra_consumptions(
+        player_map=player_map,
+        selected_cards=selected_cards,
+        config=config,
+        critical_wound_player_ids=critical_wound_player_ids,
+        pending_extra_consumptions=pending_extra_consumptions,
+    )
 
     base_damage_by_player = {
         player_id: _calculate_base_damage_with_critical_effects(
@@ -288,6 +297,7 @@ def resolve_round(
         pending_extra_consumptions=pending_extra_consumptions,
         critical_wound_player_ids=critical_wound_player_ids,
         critical_life_delta_by_player=critical_life_delta_by_player,
+        pending_animal_life_recoveries=pending_animal_life_recoveries,
     )
     extra_damage_by_player = {
         player_id: applied_extra_consumptions.get(player_id, 0)
@@ -527,6 +537,61 @@ def _schedule_next_round_animal_effects(
             player.active_animal_effects.append(PANDA_GRANDE_LETARGO)
 
 
+def _schedule_animal_extra_consumptions(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+    critical_wound_player_ids: set[int],
+    pending_extra_consumptions: list[PendingExtraConsumption],
+) -> None:
+    """Schedule supported animal-card extra consumptions for the extra phase."""
+
+    for player_id, card in selected_cards.items():
+        source = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(source, card, config)
+        if effect_id != SCIMMIA_BANANA_RUBATA:
+            continue
+        if player_id in critical_wound_player_ids:
+            continue
+
+        target = _choose_banana_rubata_target(
+            player_map,
+            source_player_id=player_id,
+            critical_wound_player_ids=critical_wound_player_ids,
+        )
+        if target is None:
+            continue
+
+        schedule_extra_consumption(
+            pending_extra_consumptions,
+            source_player_id=player_id,
+            target_player_id=target.player_id,
+            amount=1,
+            effect_id=SCIMMIA_BANANA_RUBATA,
+            recovery_player_id=player_id,
+        )
+
+
+def _choose_banana_rubata_target(
+    player_map: Mapping[int, PlayerState],
+    source_player_id: int,
+    critical_wound_player_ids: set[int],
+) -> PlayerState | None:
+    """Choose Banana Rubata target with deterministic player-id fallback."""
+
+    valid_targets = [
+        target
+        for target in player_map.values()
+        if target.player_id != source_player_id
+        and target.is_alive
+        and target.player_id not in critical_wound_player_ids
+        and target.lives > 0
+    ]
+    if not valid_targets:
+        return None
+    return min(valid_targets, key=lambda target: target.player_id)
+
+
 def schedule_life_recovery(
     pending_life_recoveries: dict[int, int],
     player_id: int,
@@ -608,6 +673,7 @@ def schedule_extra_consumption(
     amount: int,
     effect_id: str,
     event: CriticalCardEvent | None = None,
+    recovery_player_id: int | None = None,
 ) -> None:
     """Schedule extra consumption for the explicit extra-consumption phase."""
 
@@ -621,6 +687,7 @@ def schedule_extra_consumption(
             amount=amount,
             effect_id=effect_id,
             event=event,
+            recovery_player_id=recovery_player_id,
         )
     )
 
@@ -647,6 +714,7 @@ def apply_pending_extra_consumptions(
     pending_extra_consumptions: list[PendingExtraConsumption],
     critical_wound_player_ids: set[int],
     critical_life_delta_by_player: dict[int, int] | None = None,
+    pending_animal_life_recoveries: dict[int, int] | None = None,
 ) -> dict[int, int]:
     """Apply scheduled extra consumption after base consumption."""
 
@@ -666,13 +734,23 @@ def apply_pending_extra_consumptions(
             apply_life_loss(target, pending.amount)
             actual_consumed = before - target.lives
             applied_by_player[pending.target_player_id] += actual_consumed
-            if pending.effect_id != "color_extra" and actual_consumed:
+            if pending.effect_id == MORSO_DELLA_FAME and actual_consumed:
                 target.life_lost_from_critical_cards += actual_consumed
                 if critical_life_delta_by_player is not None:
                     critical_life_delta_by_player[target.player_id] = (
                         critical_life_delta_by_player.get(target.player_id, 0)
                         - actual_consumed
                     )
+            if (
+                pending.recovery_player_id is not None
+                and pending_animal_life_recoveries is not None
+                and actual_consumed
+            ):
+                schedule_life_recovery(
+                    pending_animal_life_recoveries,
+                    pending.recovery_player_id,
+                    1,
+                )
 
         if pending.event is not None:
             pending.event.effect_triggered = actual_consumed > 0
