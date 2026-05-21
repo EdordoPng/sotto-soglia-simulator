@@ -41,6 +41,34 @@ def find_lowest_value_cards(selected_cards: Mapping[int, Card]) -> set[int]:
     return find_lowest_value_players(selected_cards)
 
 
+def valid_comparison_value_targets(
+    source_player: PlayerState,
+    players: PlayerCollection,
+    revealed_cards: Mapping[int, Card],
+) -> list[PlayerState]:
+    """Return valid targets for effects that modify comparison values."""
+
+    player_map = _players_by_id(players)
+    return [
+        player_map[player_id]
+        for player_id in sorted(revealed_cards)
+        if player_id in player_map
+        and player_id != source_player.player_id
+        and player_map[player_id].is_alive
+    ]
+
+
+def choose_comparison_value_target(
+    valid_targets: Iterable[PlayerState],
+) -> PlayerState | None:
+    """Choose one comparison-value target with deterministic fallback."""
+
+    targets = list(valid_targets)
+    if not targets:
+        return None
+    return min(targets, key=lambda target: target.player_id)
+
+
 def apply_comparison_value_modifier(
     comparison_value: int,
     modifier: int,

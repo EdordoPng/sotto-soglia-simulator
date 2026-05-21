@@ -10,8 +10,13 @@ if str(SRC_PATH) not in sys.path:
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import RESPIRO_CALMO
 from sotto_soglia.models import Card, Color, PlayerState
-from sotto_soglia.round import resolve_round
-from sotto_soglia.rules import apply_comparison_value_modifier, calculate_base_damage
+from sotto_soglia.round import is_valid_extra_consumption_target, resolve_round
+from sotto_soglia.rules import (
+    apply_comparison_value_modifier,
+    calculate_base_damage,
+    choose_comparison_value_target,
+    valid_comparison_value_targets,
+)
 
 
 def test_standard_card_uses_printed_value_for_consumption_and_comparison():
@@ -85,6 +90,100 @@ def test_respiro_calmo_does_not_block_non_opponent_comparison_value_change():
         target_active_effects=[RESPIRO_CALMO],
         caused_by_opponent=False,
     ) == 2
+
+
+def test_valid_comparison_targets_include_alive_opponents_with_revealed_cards():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+    revealed_cards = {
+        1: Card(Color.BLUE, 4),
+        2: Card(Color.RED, 3),
+        3: Card(Color.GREEN, 2),
+    }
+
+    targets = valid_comparison_value_targets(players[0], players, revealed_cards)
+
+    assert [target.player_id for target in targets] == [2, 3]
+
+
+def test_source_player_is_not_valid_comparison_target():
+    source = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    revealed_cards = {1: Card(Color.BLUE, 4)}
+
+    targets = valid_comparison_value_targets(source, [source], revealed_cards)
+
+    assert targets == []
+
+
+def test_eliminated_player_is_not_valid_comparison_target():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=0, is_alive=False),
+    ]
+    revealed_cards = {
+        1: Card(Color.BLUE, 4),
+        2: Card(Color.RED, 3),
+    }
+
+    targets = valid_comparison_value_targets(players[0], players, revealed_cards)
+
+    assert targets == []
+
+
+def test_player_without_revealed_card_is_not_valid_comparison_target():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    revealed_cards = {1: Card(Color.BLUE, 4)}
+
+    targets = valid_comparison_value_targets(players[0], players, revealed_cards)
+
+    assert targets == []
+
+
+def test_affamato_player_can_still_be_valid_comparison_target_before_assignment():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    revealed_cards = {
+        1: Card(Color.BLUE, 4),
+        2: Card(Color.RED, 1),
+    }
+    critical_wound_player_ids = {2}
+
+    comparison_targets = valid_comparison_value_targets(
+        players[0],
+        players,
+        revealed_cards,
+    )
+    is_extra_target = is_valid_extra_consumption_target(
+        {player.player_id: player for player in players},
+        target_player_id=2,
+        critical_wound_player_ids=critical_wound_player_ids,
+    )
+
+    assert [target.player_id for target in comparison_targets] == [2]
+    assert is_extra_target is False
+
+
+def test_choose_comparison_value_target_uses_deterministic_fallback():
+    targets = [
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    target = choose_comparison_value_target(targets)
+
+    assert target is targets[1]
+
+
+def test_choose_comparison_value_target_returns_none_without_targets():
+    assert choose_comparison_value_target([]) is None
 
 
 def test_single_lowest_value_gets_critical_and_other_player_loses_card_value():

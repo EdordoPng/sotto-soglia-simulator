@@ -63,6 +63,17 @@ class RoundResult:
         return self.total_damage_by_player
 
 
+@dataclass
+class PendingExtraConsumption:
+    """One extra consumption scheduled for the round extra-consumption phase."""
+
+    source_player_id: int
+    target_player_id: int
+    amount: int
+    effect_id: str
+    event: CriticalCardEvent | None = None
+
+
 def _players_by_id(
     players: Mapping[int, PlayerState] | Iterable[PlayerState],
 ) -> dict[int, PlayerState]:
@@ -122,6 +133,7 @@ def resolve_round(
     pending_life_recovery_events: dict[int, list[CriticalCardEvent]] = {
         player_id: [] for player_id in player_map
     }
+    pending_extra_consumptions: list[PendingExtraConsumption] = []
 
     critical_wound_player_ids = find_lowest_value_players(selected_cards)
     lowest_value = min(
@@ -179,14 +191,31 @@ def resolve_round(
         game_id=game_id,
         round_number=round_number,
     )
+    for target_id, amount in extra_damage_by_player.items():
+        if amount > 0:
+            schedule_extra_consumption(
+                pending_extra_consumptions,
+                source_player_id=target_id,
+                target_player_id=target_id,
+                amount=amount,
+                effect_id="color_extra",
+            )
 
-    total_damage_by_player = {
-        player_id: base_damage_by_player.get(player_id, 0)
-        + extra_damage_by_player.get(player_id, 0)
-        for player_id in player_map
-    }
+    if config.critical_card_effects_enabled:
+        _schedule_morso_della_fame(
+            player_map=player_map,
+            critical_wound_player_ids=critical_wound_player_ids,
+            active_effects_by_player=active_effects_by_player,
+            strategies=strategies or {},
+            rng=rng,
+            game_state=game_state,
+            critical_events=critical_events,
+            pending_extra_consumptions=pending_extra_consumptions,
+            game_id=game_id,
+            round_number=round_number,
+        )
 
-    for player_id, damage in total_damage_by_player.items():
+    for player_id, damage in base_damage_by_player.items():
         apply_life_loss(player_map[player_id], damage)
 
     if config.critical_card_effects_enabled:
@@ -202,18 +231,22 @@ def resolve_round(
             game_id=game_id,
             round_number=round_number,
         )
-        _apply_morso_della_fame(
-            player_map=player_map,
-            critical_wound_player_ids=critical_wound_player_ids,
-            active_effects_by_player=active_effects_by_player,
-            strategies=strategies or {},
-            rng=rng,
-            game_state=game_state,
-            critical_events=critical_events,
-            critical_life_delta_by_player=critical_life_delta_by_player,
-            game_id=game_id,
-            round_number=round_number,
-        )
+
+    applied_extra_consumptions = apply_pending_extra_consumptions(
+        player_map=player_map,
+        pending_extra_consumptions=pending_extra_consumptions,
+        critical_wound_player_ids=critical_wound_player_ids,
+        critical_life_delta_by_player=critical_life_delta_by_player,
+    )
+    extra_damage_by_player = {
+        player_id: applied_extra_consumptions.get(player_id, 0)
+        for player_id in player_map
+    }
+    total_damage_by_player = {
+        player_id: base_damage_by_player.get(player_id, 0)
+        + extra_damage_by_player.get(player_id, 0)
+        for player_id in player_map
+    }
 
     apply_pending_life_recoveries(
         player_map=player_map,
@@ -426,6 +459,94 @@ def apply_pending_life_recoveries(
             remaining_recovered -= event_delta
 
     return applied_recoveries
+
+
+def schedule_extra_consumption(
+    pending_extra_consumptions: list[PendingExtraConsumption],
+    source_player_id: int,
+    target_player_id: int,
+    amount: int,
+    effect_id: str,
+    event: CriticalCardEvent | None = None,
+) -> None:
+    """Schedule extra consumption for the explicit extra-consumption phase."""
+
+    if amount <= 0:
+        return
+
+    pending_extra_consumptions.append(
+        PendingExtraConsumption(
+            source_player_id=source_player_id,
+            target_player_id=target_player_id,
+            amount=amount,
+            effect_id=effect_id,
+            event=event,
+        )
+    )
+
+
+def is_valid_extra_consumption_target(
+    player_map: Mapping[int, PlayerState],
+    target_player_id: int,
+    critical_wound_player_ids: set[int],
+) -> bool:
+    """Return whether a target can receive extra consumption now."""
+
+    target = player_map.get(target_player_id)
+    if target is None:
+        return False
+    if not target.is_alive:
+        return False
+    if target.player_id in critical_wound_player_ids:
+        return False
+    return target.lives > 0
+
+
+def apply_pending_extra_consumptions(
+    player_map: Mapping[int, PlayerState],
+    pending_extra_consumptions: list[PendingExtraConsumption],
+    critical_wound_player_ids: set[int],
+    critical_life_delta_by_player: dict[int, int] | None = None,
+) -> dict[int, int]:
+    """Apply scheduled extra consumption after base consumption."""
+
+    applied_by_player = {player_id: 0 for player_id in player_map}
+    for pending in pending_extra_consumptions:
+        target = player_map.get(pending.target_player_id)
+        if target is None:
+            continue
+
+        actual_consumed = 0
+        if is_valid_extra_consumption_target(
+            player_map,
+            pending.target_player_id,
+            critical_wound_player_ids,
+        ):
+            before = target.lives
+            apply_life_loss(target, pending.amount)
+            actual_consumed = before - target.lives
+            applied_by_player[pending.target_player_id] += actual_consumed
+            if pending.effect_id != "color_extra" and actual_consumed:
+                target.life_lost_from_critical_cards += actual_consumed
+                if critical_life_delta_by_player is not None:
+                    critical_life_delta_by_player[target.player_id] = (
+                        critical_life_delta_by_player.get(target.player_id, 0)
+                        - actual_consumed
+                    )
+
+        if pending.event is not None:
+            pending.event.effect_triggered = actual_consumed > 0
+            pending.event.life_delta_targets = (
+                {target.player_id: -actual_consumed} if actual_consumed else {}
+            )
+            pending.event.player_lives_after = player_map[
+                pending.source_player_id
+            ].lives
+            pending.event.player_critical_wounds_after = player_map[
+                pending.source_player_id
+            ].critical_wounds
+
+    return applied_by_player
 
 
 def _validate_active_critical_effects_for_profile(
@@ -732,7 +853,7 @@ def _apply_colpo_di_coda(
         )
 
 
-def _apply_morso_della_fame(
+def _schedule_morso_della_fame(
     player_map: dict[int, PlayerState],
     critical_wound_player_ids: set[int],
     active_effects_by_player: Mapping[int, list[str]],
@@ -740,11 +861,11 @@ def _apply_morso_della_fame(
     rng: Random,
     game_state: dict | None,
     critical_events: list[CriticalCardEvent],
-    critical_life_delta_by_player: dict[int, int],
+    pending_extra_consumptions: list[PendingExtraConsumption],
     game_id: int,
     round_number: int,
 ) -> None:
-    """Apply Morso della Fame after normal round damage."""
+    """Schedule Morso della Fame extra consumption for the extra phase."""
 
     for source_id in sorted(critical_wound_player_ids):
         source = player_map[source_id]
@@ -770,30 +891,31 @@ def _apply_morso_della_fame(
         triggered = target is not None
         if target is not None:
             target_player_id = target.player_id
-            before = target.lives
-            apply_life_loss(target, 2)
-            delta = target.lives - before
-            if delta:
-                target.life_lost_from_critical_cards += -delta
-                critical_life_delta_by_player[target.player_id] += delta
-                life_delta_targets[target.player_id] = delta
 
-        critical_events.append(
-            CriticalCardEvent(
-                game_id=game_id,
-                round_number=round_number,
-                draw_order=None,
-                player_id=source_id,
-                critical_card_id=MORSO_DELLA_FAME,
-                critical_card_name=critical_card_name(MORSO_DELLA_FAME),
-                timing="next_round",
-                effect_triggered=triggered,
-                target_player_id=target_player_id,
-                life_delta_targets=life_delta_targets,
-                player_lives_after=source.lives,
-                player_critical_wounds_after=source.critical_wounds,
-            )
+        event = CriticalCardEvent(
+            game_id=game_id,
+            round_number=round_number,
+            draw_order=None,
+            player_id=source_id,
+            critical_card_id=MORSO_DELLA_FAME,
+            critical_card_name=critical_card_name(MORSO_DELLA_FAME),
+            timing="next_round",
+            effect_triggered=triggered,
+            target_player_id=target_player_id,
+            life_delta_targets=life_delta_targets,
+            player_lives_after=source.lives,
+            player_critical_wounds_after=source.critical_wounds,
         )
+        critical_events.append(event)
+        if target is not None:
+            schedule_extra_consumption(
+                pending_extra_consumptions,
+                source_player_id=source_id,
+                target_player_id=target.player_id,
+                amount=2,
+                effect_id=MORSO_DELLA_FAME,
+                event=event,
+            )
 
 
 def _effect_event(

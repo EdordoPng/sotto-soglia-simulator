@@ -52,8 +52,10 @@ from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
 from sotto_soglia.game import _hand_sizes_from_critical_effects, play_game
 from sotto_soglia.models import Card, Color, EliminationReason, PlayerState
 from sotto_soglia.round import (
+    apply_pending_extra_consumptions,
     apply_pending_life_recoveries,
     resolve_round,
+    schedule_extra_consumption,
     schedule_life_recovery,
 )
 from sotto_soglia.rules import apply_life_loss, resolve_eliminations
@@ -294,8 +296,8 @@ def test_briciola_recovery_phase_happens_after_current_damage_step_b():
     pending_recoveries = {1: 0}
     schedule_life_recovery(pending_recoveries, player.player_id, 1)
 
-    # Step B keeps the current damage architecture; Step C will split all
-    # extra-consumption details more completely.
+    # This helper-level assertion fixes the recovery phase after any current
+    # consumption already drove the player to zero.
     apply_life_loss(player, 1)
     assert player.lives == 0
 
@@ -822,6 +824,113 @@ def test_morso_della_fame_triggers_on_next_affamato_and_damages_valid_opponent()
     assert morso_event.life_delta_targets == {2: -2}
 
 
+def test_morso_della_fame_schedules_extra_consumption_without_immediate_loss():
+    players = {
+        1: PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        2: PlayerState(player_id=2, color=Color.RED, lives=12),
+    }
+    pending_extra_consumptions = []
+
+    schedule_extra_consumption(
+        pending_extra_consumptions,
+        source_player_id=1,
+        target_player_id=2,
+        amount=2,
+        effect_id=MORSO_DELLA_FAME,
+    )
+
+    assert players[2].lives == 12
+
+    applied = apply_pending_extra_consumptions(
+        players,
+        pending_extra_consumptions,
+        critical_wound_player_ids={1},
+    )
+
+    assert applied[2] == 2
+    assert players[2].lives == 10
+
+
+def test_morso_della_fame_extra_consumption_tracks_actual_consumed_scorte():
+    players = {
+        1: PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        2: PlayerState(player_id=2, color=Color.RED, lives=1),
+    }
+    pending_extra_consumptions = []
+    schedule_extra_consumption(
+        pending_extra_consumptions,
+        source_player_id=1,
+        target_player_id=2,
+        amount=2,
+        effect_id=MORSO_DELLA_FAME,
+    )
+
+    applied = apply_pending_extra_consumptions(
+        players,
+        pending_extra_consumptions,
+        critical_wound_player_ids={1},
+    )
+
+    assert applied[2] == 1
+    assert players[2].lives == 0
+
+
+def test_morso_della_fame_extra_consumption_with_one_scorta_stops_at_zero():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=2),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4, custom_consumption_value=1),
+            3: Card(Color.GREEN, 5, custom_consumption_value=1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    morso_event = [
+        event for event in result.critical_events
+        if event.critical_card_id == MORSO_DELLA_FAME
+    ][0]
+    assert players[1].lives == 0
+    assert result.extra_damage_by_player[2] == 1
+    assert morso_event.life_delta_targets == {2: -1}
+
+
+def test_morso_della_fame_extra_consumption_has_no_effect_on_zero_scorte_target():
+    players = {
+        1: PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        2: PlayerState(player_id=2, color=Color.RED, lives=0),
+    }
+    pending_extra_consumptions = []
+    schedule_extra_consumption(
+        pending_extra_consumptions,
+        source_player_id=1,
+        target_player_id=2,
+        amount=2,
+        effect_id=MORSO_DELLA_FAME,
+    )
+
+    applied = apply_pending_extra_consumptions(
+        players,
+        pending_extra_consumptions,
+        critical_wound_player_ids={1},
+    )
+
+    assert applied[2] == 0
+    assert players[2].lives == 0
+
+
 def test_morso_della_fame_consumes_without_damage_when_no_next_affamato():
     players = [
         PlayerState(
@@ -1022,6 +1131,101 @@ def test_morso_della_fame_is_not_applied_twice():
         event for event in second_result.critical_events
         if event.critical_card_id == MORSO_DELLA_FAME
     ] == []
+
+
+def test_briciola_recovery_happens_after_extra_consumption_phase_step_c():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=2)
+    config = _v05_hunger_controlled_config()
+    pending_extra_consumptions = []
+    pending_recoveries = {1: 0}
+    schedule_extra_consumption(
+        pending_extra_consumptions,
+        source_player_id=2,
+        target_player_id=1,
+        amount=2,
+        effect_id=MORSO_DELLA_FAME,
+    )
+    schedule_life_recovery(pending_recoveries, player.player_id, 1)
+
+    apply_pending_extra_consumptions(
+        {1: player},
+        pending_extra_consumptions,
+        critical_wound_player_ids=set(),
+    )
+    assert player.lives == 0
+
+    apply_pending_life_recoveries({1: player}, pending_recoveries, config)
+    eliminated_players = resolve_eliminations({1: player}, config)
+
+    assert player.lives == 1
+    assert player.is_alive is True
+    assert eliminated_players == []
+
+
+def test_razione_risparmiata_reduces_base_consumption_not_morso_extra():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(
+            player_id=2,
+            color=Color.RED,
+            lives=12,
+            active_critical_effects=[RAZIONE_RISPARMIATA],
+        ),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4),
+            3: Card(Color.GREEN, 5, custom_consumption_value=1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.base_damage_by_player[2] == 3
+    assert result.extra_damage_by_player[2] == 2
+    assert players[1].lives == 7
+
+
+def test_respiro_calmo_does_not_block_morso_extra_consumption():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_critical_effects=[MORSO_DELLA_FAME],
+        ),
+        PlayerState(
+            player_id=2,
+            color=Color.RED,
+            lives=12,
+            active_critical_effects=[RESPIRO_CALMO],
+        ),
+        PlayerState(player_id=3, color=Color.GREEN, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 4, custom_consumption_value=1),
+            3: Card(Color.GREEN, 5, custom_consumption_value=1),
+        },
+        _v05_hunger_controlled_config(),
+        critical_deck=[],
+    )
+
+    assert result.extra_damage_by_player[2] == 2
+    assert players[1].lives == 9
+    assert players[1].consumed_critical_effects == [RESPIRO_CALMO]
 
 
 def test_respiro_calmo_registers_next_round_effect_without_immediate_scorte_change():
