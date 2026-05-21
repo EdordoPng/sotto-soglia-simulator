@@ -380,6 +380,73 @@ class V05BasicStrategy(BaseStrategy):
         return max(evaluated_cards, key=score)[0]
 
 
+class V05BalancedStrategy(BaseStrategy):
+    """More Scorte-conscious v0.5 strategy with moderated Affamato avoidance."""
+
+    name = "v05_balanced"
+
+    def choose_card(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+        rng: Random,
+    ) -> Card:
+        """Choose a card using a conservative Scorte/Affamato balance."""
+
+        config = _game_config(game_state)
+        evaluated_cards = [
+            (
+                card,
+                get_effective_comparison_value(player, card, config),
+                get_effective_consumption_value(player, card, config),
+            )
+            for card in hand
+        ]
+        lowest_hand_comparison = min(
+            comparison
+            for _, comparison, _ in evaluated_cards
+        )
+        affamato_remaining = config.critical_wounds_limit - player.critical_wounds
+        near_abandonment = affamato_remaining <= 1
+        cautious = affamato_remaining <= 2
+
+        def score(card_data: tuple[Card, int, int]) -> tuple[float, int, int, int, int]:
+            card, comparison, consumption = card_data
+            points = min(comparison, 4) * 2.0
+            points -= consumption * 3.5
+
+            low_comparison_penalty = max(0, 3 - comparison) * 1.5
+            if comparison == lowest_hand_comparison:
+                low_comparison_penalty += 2.0
+            if near_abandonment:
+                low_comparison_penalty *= 2.0
+            elif cautious:
+                low_comparison_penalty *= 1.4
+            points -= low_comparison_penalty
+
+            if consumption >= player.lives:
+                points -= 120.0
+            else:
+                remaining_lives = player.lives - consumption
+                if remaining_lives <= 1:
+                    points -= 30.0
+                elif remaining_lives <= 2:
+                    points -= 18.0
+                elif remaining_lives <= 3:
+                    points -= 8.0
+
+            return (
+                points,
+                -consumption,
+                comparison,
+                -card.value,
+                -_color_order(card.color),
+            )
+
+        return max(evaluated_cards, key=score)[0]
+
+
 class AdaptivePressureStrategy(BaseStrategy):
     """Strategy that balances pressure, critical-wound risk and survival."""
 
@@ -586,6 +653,7 @@ AVAILABLE_STRATEGIES = {
     AntiCriticalStrategy.name: AntiCriticalStrategy,
     MixedStrategy.name: MixedStrategy,
     V05BasicStrategy.name: V05BasicStrategy,
+    V05BalancedStrategy.name: V05BalancedStrategy,
     AdaptivePressureStrategy.name: AdaptivePressureStrategy,
     CriticalAdaptiveStrategy.name: CriticalAdaptiveStrategy,
 }
