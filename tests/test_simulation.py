@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 import sys
 
@@ -9,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.cli import format_simulation_summary
 from sotto_soglia.critical import V05_HUNGER_DECK_PROFILE_ID
+from sotto_soglia.config import get_v05_config_for_players
 from sotto_soglia.simulation import SimulationRunner, SimulationResult
 from sotto_soglia.strategies import create_strategy
 
@@ -131,4 +133,23 @@ def test_simulation_runner_smoke_with_animal_card_effects_enabled():
     assert len(result.game_results) == 1
     assert result.critical_card_effects_enabled is True
     assert result.animal_card_effects_enabled is True
+    assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+
+
+def test_simulation_runner_smoke_with_animal_card_effects_disabled():
+    result = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        config=replace(
+            get_v05_config_for_players(4),
+            animal_card_effects_enabled=False,
+        ),
+    )
+
+    assert result.players_count == 4
+    assert result.games_count == 1
+    assert len(result.game_results) == 1
+    assert result.critical_card_effects_enabled is True
+    assert result.animal_card_effects_enabled is False
     assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID

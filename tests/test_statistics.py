@@ -7,10 +7,11 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.simulation import SimulationRunner
-from sotto_soglia.statistics import StatisticAggregator
+from sotto_soglia.critical import V05_HUNGER_CARD_IDS
 from sotto_soglia.game import GameResult
 from sotto_soglia.models import Color, EliminationReason, PlayerState
+from sotto_soglia.simulation import SimulationRunner
+from sotto_soglia.statistics import StatisticAggregator
 
 
 def test_statistic_aggregator_returns_required_fields():
@@ -30,6 +31,16 @@ def test_statistic_aggregator_returns_required_fields():
     assert "eliminations_by_critical_wounds" in stats
     assert "average_winner_lives" in stats
     assert "average_winner_critical_wounds" in stats
+    assert "critical_card_stats" in stats
+
+
+def test_statistic_aggregator_tracks_v05_hunger_card_stats():
+    simulation = SimulationRunner().run(players_count=4, games_count=10, seed=42)
+    stats = StatisticAggregator().aggregate(simulation.game_results)
+
+    assert set(V05_HUNGER_CARD_IDS).issubset(stats["critical_card_stats"])
+    assert set(V05_HUNGER_CARD_IDS).issubset(stats["critical_effects_by_card"])
+    assert stats["critical_cards_drawn_total"] >= 0
 
 
 def test_statistic_aggregator_empty_input_is_stable():
