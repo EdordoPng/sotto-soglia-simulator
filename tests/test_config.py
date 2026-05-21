@@ -24,12 +24,14 @@ def _cli_args(
     initial_lives: int | None = None,
     critical_wounds_max: int | None = None,
     critical_card_effects: str = "auto",
+    animal_card_effects: str = "auto",
 ) -> Namespace:
     return Namespace(
         players=players,
         initial_lives=initial_lives,
         critical_wounds_max=critical_wounds_max,
         critical_card_effects=critical_card_effects,
+        animal_card_effects=animal_card_effects,
         critical_deck_seed=None,
         critical_deck_order=None,
         sono_ancora_qui_variant="single_2",
@@ -43,6 +45,7 @@ def test_game_config_keeps_legacy_numeric_defaults():
     assert config.critical_wounds_limit == 3
     assert config.color_effects_enabled is True
     assert config.critical_card_effects_enabled is False
+    assert config.animal_card_effects_enabled is False
     assert config.critical_deck_profile_id == LEGACY_CRITICAL_DECK_PROFILE_ID
 
 
@@ -65,6 +68,7 @@ def test_v05_config_for_players_returns_numeric_presets(
     assert config.critical_wounds_limit == critical_wounds_limit
     assert config.color_effects_enabled is False
     assert config.critical_card_effects_enabled is True
+    assert config.animal_card_effects_enabled is False
     assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
 
 
@@ -104,6 +108,7 @@ def test_cli_config_uses_v05_numeric_presets_without_manual_overrides(
     assert config.critical_wounds_limit == critical_wounds_limit
     assert config.color_effects_enabled is False
     assert config.critical_card_effects_enabled is True
+    assert config.animal_card_effects_enabled is False
     assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
 
 
@@ -111,6 +116,13 @@ def test_cli_config_critical_card_effects_auto_keeps_v05_preset():
     config = build_game_config_from_args(_cli_args(4))
 
     assert config.critical_card_effects_enabled is True
+    assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+
+
+def test_cli_config_animal_card_effects_auto_keeps_v05_preset():
+    config = build_game_config_from_args(_cli_args(4))
+
+    assert config.animal_card_effects_enabled is False
     assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
 
 
@@ -129,6 +141,24 @@ def test_cli_config_can_explicitly_enable_critical_card_effects():
     )
 
     assert config.critical_card_effects_enabled is True
+    assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+
+
+def test_cli_config_can_explicitly_enable_animal_card_effects():
+    config = build_game_config_from_args(
+        _cli_args(4, animal_card_effects="on")
+    )
+
+    assert config.animal_card_effects_enabled is True
+    assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+
+
+def test_cli_config_can_explicitly_disable_animal_card_effects():
+    config = build_game_config_from_args(
+        _cli_args(4, animal_card_effects="off")
+    )
+
+    assert config.animal_card_effects_enabled is False
     assert config.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
 
 
@@ -152,6 +182,7 @@ def test_simulation_runner_uses_v05_preset_when_config_is_omitted():
     assert result.critical_wounds_limit == 4
     assert result.color_effects_enabled is False
     assert result.critical_card_effects_enabled is True
+    assert result.animal_card_effects_enabled is False
     assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
 
 
@@ -167,4 +198,5 @@ def test_simulation_runner_preserves_explicit_legacy_config():
     assert result.critical_wounds_limit == 3
     assert result.color_effects_enabled is True
     assert result.critical_card_effects_enabled is False
+    assert result.animal_card_effects_enabled is False
     assert result.critical_deck_profile_id == LEGACY_CRITICAL_DECK_PROFILE_ID

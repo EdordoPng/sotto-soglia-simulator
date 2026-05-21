@@ -240,6 +240,11 @@ def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
             args.critical_card_effects,
             "--critical-card-effects",
         )
+    if args.animal_card_effects != "auto":
+        config_values["animal_card_effects_enabled"] = parse_on_off(
+            args.animal_card_effects,
+            "--animal-card-effects",
+        )
     if critical_deck_order is not None:
         config_values["critical_deck_profile_id"] = LEGACY_CRITICAL_DECK_PROFILE_ID
     if args.initial_lives is not None:
@@ -337,6 +342,15 @@ def main() -> None:
         help=(
             "Critical wound/Affamato card effects: auto keeps the selected "
             "preset value, on/off force an override."
+        ),
+    )
+    parser.add_argument(
+        "--animal-card-effects",
+        choices=["auto", "off", "on"],
+        default="auto",
+        help=(
+            "Animal card effects: auto keeps the selected preset value, "
+            "on/off force an override."
         ),
     )
     parser.add_argument(
