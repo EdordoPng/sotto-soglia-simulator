@@ -12,7 +12,10 @@ from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import BRICIOLA_NASCOSTA, V05_HUNGER_DECK_PROFILE_ID
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.round import resolve_round
-from sotto_soglia.rules import get_effective_comparison_value
+from sotto_soglia.rules import (
+    get_effective_comparison_value,
+    get_effective_consumption_value,
+)
 
 
 def _animal_config(**overrides) -> GameConfig:
@@ -61,6 +64,33 @@ def test_scatto_improvviso_is_inactive_when_other_animal_plays_coniglio_one():
         assert get_effective_comparison_value(player, card, _animal_config()) == 1
 
 
+def test_passo_leggero_sets_own_coniglio_two_effective_consumption_to_one():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    card = Card(Color.RED, 2)
+
+    assert card.value == 2
+    assert card.consumption_value == 2
+    assert card.comparison_value == 2
+    assert get_effective_consumption_value(player, card, _animal_config()) == 1
+    assert get_effective_comparison_value(player, card, _animal_config()) == 2
+
+
+def test_passo_leggero_is_inactive_when_animal_effects_are_disabled():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    card = Card(Color.RED, 2)
+
+    assert get_effective_consumption_value(player, card, GameConfig()) == 2
+
+
+def test_passo_leggero_is_inactive_when_other_animal_plays_coniglio_two():
+    card = Card(Color.RED, 2)
+
+    for color in (Color.BLUE, Color.GREEN, Color.YELLOW):
+        player = PlayerState(player_id=1, color=color, lives=12)
+
+        assert get_effective_consumption_value(player, card, _animal_config()) == 2
+
+
 def test_grande_balzo_sets_own_coniglio_four_effective_comparison_to_five():
     player = PlayerState(player_id=1, color=Color.RED, lives=12)
     card = Card(Color.RED, 4)
@@ -103,6 +133,74 @@ def test_round_affamato_uses_scatto_improvviso_effective_comparison_value():
     assert result.critical_wound_players == [1]
     assert players[0].critical_wounds == 1
     assert players[1].critical_wounds == 0
+
+
+def test_round_base_consumption_uses_passo_leggero_when_coniglio_is_not_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 2),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[2] == 1
+    assert players[1].lives == 11
+
+
+def test_round_base_consumption_keeps_coniglio_two_standard_when_animals_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 2),
+    }
+
+    result = resolve_round(players, selected_cards, GameConfig(color_effects_enabled=False))
+
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[2] == 2
+    assert players[1].lives == 10
+
+
+def test_round_base_consumption_keeps_coniglio_two_standard_for_other_animal():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.RED, 2),
+        2: Card(Color.BLUE, 1),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 2
+    assert players[0].lives == 10
+
+
+def test_passo_leggero_does_not_make_affamato_coniglio_consume_one():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 3),
+        2: Card(Color.RED, 2),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[2] == 0
+    assert players[1].lives == 12
 
 
 def test_round_affamato_uses_grande_balzo_effective_comparison_value():

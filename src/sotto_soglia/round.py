@@ -31,6 +31,7 @@ from sotto_soglia.rules import (
     apply_life_loss,
     find_lowest_effective_value_players,
     get_effective_comparison_value,
+    get_effective_consumption_value,
     resolve_eliminations,
 )
 from sotto_soglia.strategies import BaseStrategy, choose_fallback_critical_effect_target
@@ -184,6 +185,7 @@ def resolve_round(
         player_id: _calculate_base_damage_with_critical_effects(
             player=player_map[player_id],
             card=card,
+            config=config,
             received_critical_wound=player_id in critical_wound_player_ids,
             color_effects_enabled=config.color_effects_enabled,
             active_effects=active_effects_by_player.get(player_id, []),
@@ -665,6 +667,7 @@ def _choose_single_critical_effect_target(
 def _calculate_base_damage_with_critical_effects(
     player: PlayerState,
     card: Card,
+    config: GameConfig,
     received_critical_wound: bool,
     color_effects_enabled: bool,
     active_effects: list[str],
@@ -687,7 +690,7 @@ def _calculate_base_damage_with_critical_effects(
             )
         return 0
 
-    damage = card.consumption_value
+    damage = get_effective_consumption_value(player, card, config)
     if RAZIONE_RISPARMIATA in active_effects:
         before = damage
         damage = max(1, damage - 1)

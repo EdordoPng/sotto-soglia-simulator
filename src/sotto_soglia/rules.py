@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 
 from sotto_soglia.animal_effects import (
     CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
     get_effect_id_for_card,
     is_own_animal_card_effect_active,
@@ -47,6 +48,22 @@ def find_lowest_value_cards(selected_cards: Mapping[int, Card]) -> set[int]:
     return find_lowest_value_players(selected_cards)
 
 
+def get_active_own_animal_effect_id(
+    player: PlayerState,
+    card: Card,
+    config: GameConfig,
+) -> str | None:
+    """Return the active own-animal effect id for this play, if any."""
+
+    if not config.animal_card_effects_enabled:
+        return None
+
+    if not is_own_animal_card_effect_active(player, card):
+        return None
+
+    return get_effect_id_for_card(card)
+
+
 def get_effective_comparison_value(
     player: PlayerState,
     card: Card,
@@ -54,13 +71,7 @@ def get_effective_comparison_value(
 ) -> int:
     """Return the comparison value for a card as played by one player."""
 
-    if not config.animal_card_effects_enabled:
-        return card.comparison_value
-
-    if not is_own_animal_card_effect_active(player, card):
-        return card.comparison_value
-
-    effect_id = get_effect_id_for_card(card)
+    effect_id = get_active_own_animal_effect_id(player, card, config)
     if effect_id == CONIGLIO_SCATTO_IMPROVVISO:
         return 2
 
@@ -68,6 +79,20 @@ def get_effective_comparison_value(
         return 5
 
     return card.comparison_value
+
+
+def get_effective_consumption_value(
+    player: PlayerState,
+    card: Card,
+    config: GameConfig,
+) -> int:
+    """Return the consumption value for a card as played by one player."""
+
+    effect_id = get_active_own_animal_effect_id(player, card, config)
+    if effect_id == CONIGLIO_PASSO_LEGGERO:
+        return 1
+
+    return card.consumption_value
 
 
 def find_lowest_effective_value_players(
