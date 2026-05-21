@@ -1,8 +1,14 @@
 """Card selection strategies."""
 
+from dataclasses import dataclass
 from random import Random
 from typing import Any
 
+from sotto_soglia.animal_effects import (
+    ANIMAL_DISPLAY_NAMES,
+    get_animal_for_color,
+    get_display_color_for_technical_color,
+)
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import COLPO_DI_CODA, SONO_ANCORA_QUI
 from sotto_soglia.models import Card, Color, PlayerState
@@ -22,6 +28,31 @@ def _card_key(card: Card) -> tuple[int, int]:
     """Sort cards by value and then stable color order."""
 
     return (card.value, _color_order(card.color))
+
+
+@dataclass(frozen=True)
+class StrategyDecisionCandidate:
+    """Scoring breakdown for one strategy candidate card."""
+
+    candidate_card_color: str
+    candidate_card_display_color: str
+    candidate_card_animal: str
+    candidate_card_value: int
+    effective_comparison: int
+    effective_consumption: int
+    score: float
+    chosen: bool
+    choice_rank: int
+    reason_flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _RankedStrategyCandidate:
+    """Internal ranked candidate retaining the original card object."""
+
+    card: Card
+    candidate: StrategyDecisionCandidate
+    sort_key: tuple[float, int, int, int, int]
 
 
 def _alive_opponent_colors(
@@ -58,6 +89,239 @@ def _game_config(game_state: dict[str, Any] | None) -> GameConfig:
     return GameConfig()
 
 
+def _v05_reason_flags(
+    player: PlayerState,
+    comparison: int,
+    consumption: int,
+    lowest_hand_comparison: int,
+    config: GameConfig,
+) -> tuple[str, ...]:
+    """Return simple audit flags for a v0.5 strategy candidate."""
+
+    flags: list[str] = []
+    if comparison == lowest_hand_comparison:
+        flags.append("lowest_comparison")
+    if player.critical_wounds >= config.critical_wounds_limit - 1:
+        flags.append("near_abandonment")
+    if consumption >= player.lives:
+        flags.append("lethal_consumption")
+    else:
+        remaining_lives = player.lives - consumption
+        if remaining_lives == 1:
+            flags.append("remaining_lives_1")
+        elif remaining_lives == 2:
+            flags.append("remaining_lives_2")
+        elif remaining_lives == 3:
+            flags.append("remaining_lives_3")
+    if comparison >= 4:
+        flags.append("high_comparison")
+    if consumption <= 1:
+        flags.append("low_consumption")
+    return tuple(flags)
+
+
+def _build_strategy_decision_candidate(
+    card: Card,
+    comparison: int,
+    consumption: int,
+    score: float,
+    chosen: bool,
+    choice_rank: int,
+    reason_flags: tuple[str, ...],
+) -> StrategyDecisionCandidate:
+    """Build public candidate telemetry for one scored card."""
+
+    animal = get_animal_for_color(card.color)
+    return StrategyDecisionCandidate(
+        candidate_card_color=card.color.name,
+        candidate_card_display_color=get_display_color_for_technical_color(card.color),
+        candidate_card_animal=ANIMAL_DISPLAY_NAMES[animal],
+        candidate_card_value=card.value,
+        effective_comparison=comparison,
+        effective_consumption=consumption,
+        score=score,
+        chosen=chosen,
+        choice_rank=choice_rank,
+        reason_flags=reason_flags,
+    )
+
+
+def _rank_v05_basic_candidates(
+    player: PlayerState,
+    hand: list[Card],
+    game_state: dict[str, Any] | None,
+) -> list[_RankedStrategyCandidate]:
+    """Rank v05_basic candidate cards with the strategy's current scoring."""
+
+    config = _game_config(game_state)
+    alive_players_count = 1 + len(_alive_opponents(player, game_state))
+    evaluated_cards = [
+        (
+            card,
+            get_effective_comparison_value(player, card, config),
+            get_effective_consumption_value(player, card, config),
+        )
+        for card in hand
+    ]
+    lowest_hand_comparison = min(
+        comparison
+        for _, comparison, _ in evaluated_cards
+    )
+    affamato_remaining = config.critical_wounds_limit - player.critical_wounds
+    near_abandonment = affamato_remaining <= 1
+    cautious = affamato_remaining <= 2
+
+    scored_candidates = []
+    for card, comparison, consumption in evaluated_cards:
+        points = comparison * 3.0
+        points -= consumption * 2.0
+
+        low_comparison_penalty = max(0, 4 - comparison) * 2.0
+        if comparison == lowest_hand_comparison:
+            low_comparison_penalty += 3.0
+        if near_abandonment:
+            low_comparison_penalty *= 3.0
+        elif cautious:
+            low_comparison_penalty *= 1.8
+        if alive_players_count <= 2:
+            low_comparison_penalty *= 0.8
+        points -= low_comparison_penalty
+
+        if consumption >= player.lives:
+            points -= 100.0
+        else:
+            remaining_lives = player.lives - consumption
+            if remaining_lives <= 1:
+                points -= 18.0
+            elif remaining_lives <= 2:
+                points -= 9.0
+
+        sort_key = (
+            points,
+            -consumption,
+            comparison,
+            -card.value,
+            -_color_order(card.color),
+        )
+        scored_candidates.append((card, comparison, consumption, points, sort_key))
+
+    return _rank_scored_v05_candidates(
+        player,
+        scored_candidates,
+        lowest_hand_comparison,
+        config,
+    )
+
+
+def _rank_v05_balanced_candidates(
+    player: PlayerState,
+    hand: list[Card],
+    game_state: dict[str, Any] | None,
+) -> list[_RankedStrategyCandidate]:
+    """Rank v05_balanced candidate cards with the strategy's current scoring."""
+
+    config = _game_config(game_state)
+    evaluated_cards = [
+        (
+            card,
+            get_effective_comparison_value(player, card, config),
+            get_effective_consumption_value(player, card, config),
+        )
+        for card in hand
+    ]
+    lowest_hand_comparison = min(
+        comparison
+        for _, comparison, _ in evaluated_cards
+    )
+    affamato_remaining = config.critical_wounds_limit - player.critical_wounds
+    near_abandonment = affamato_remaining <= 1
+    cautious = affamato_remaining <= 2
+
+    scored_candidates = []
+    for card, comparison, consumption in evaluated_cards:
+        points = min(comparison, 4) * 2.4
+        points -= consumption * 3.0
+
+        low_comparison_penalty = max(0, 3 - comparison) * 1.5
+        if comparison == lowest_hand_comparison:
+            low_comparison_penalty += 2.0
+        if near_abandonment:
+            low_comparison_penalty *= 2.0
+        elif cautious:
+            low_comparison_penalty *= 1.4
+        points -= low_comparison_penalty
+
+        if consumption >= player.lives:
+            points -= 120.0
+        else:
+            remaining_lives = player.lives - consumption
+            if remaining_lives <= 1:
+                points -= 24.0
+            elif remaining_lives <= 2:
+                points -= 12.0
+            elif remaining_lives <= 3:
+                points -= 4.0
+
+        sort_key = (
+            points,
+            -consumption,
+            comparison,
+            -card.value,
+            -_color_order(card.color),
+        )
+        scored_candidates.append((card, comparison, consumption, points, sort_key))
+
+    return _rank_scored_v05_candidates(
+        player,
+        scored_candidates,
+        lowest_hand_comparison,
+        config,
+    )
+
+
+def _rank_scored_v05_candidates(
+    player: PlayerState,
+    scored_candidates: list[tuple[Card, int, int, float, tuple[float, int, int, int, int]]],
+    lowest_hand_comparison: int,
+    config: GameConfig,
+) -> list[_RankedStrategyCandidate]:
+    """Return scored candidates ordered by strategy preference."""
+
+    ranked_input = sorted(
+        scored_candidates,
+        key=lambda item: item[4],
+        reverse=True,
+    )
+    ranked_candidates = []
+    for index, (card, comparison, consumption, points, sort_key) in enumerate(
+        ranked_input,
+        start=1,
+    ):
+        candidate = _build_strategy_decision_candidate(
+            card=card,
+            comparison=comparison,
+            consumption=consumption,
+            score=points,
+            chosen=index == 1,
+            choice_rank=index,
+            reason_flags=_v05_reason_flags(
+                player,
+                comparison,
+                consumption,
+                lowest_hand_comparison,
+                config,
+            ),
+        )
+        ranked_candidates.append(
+            _RankedStrategyCandidate(
+                card=card,
+                candidate=candidate,
+                sort_key=sort_key,
+            )
+        )
+    return ranked_candidates
+
+
 class BaseStrategy:
     """Base class for all strategies."""
 
@@ -73,6 +337,16 @@ class BaseStrategy:
         """Choose one card from the current hand."""
 
         raise NotImplementedError
+
+    def evaluate_candidates(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+    ) -> list[StrategyDecisionCandidate]:
+        """Return optional scoring telemetry for strategies that expose it."""
+
+        return []
 
     def choose_critical_effect_target(
         self,
@@ -326,58 +600,20 @@ class V05BasicStrategy(BaseStrategy):
     ) -> Card:
         """Choose a card using effective v0.5 comparison and consumption values."""
 
-        config = _game_config(game_state)
-        alive_players_count = 1 + len(_alive_opponents(player, game_state))
-        evaluated_cards = [
-            (
-                card,
-                get_effective_comparison_value(player, card, config),
-                get_effective_consumption_value(player, card, config),
-            )
-            for card in hand
+        return _rank_v05_basic_candidates(player, hand, game_state)[0].card
+
+    def evaluate_candidates(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+    ) -> list[StrategyDecisionCandidate]:
+        """Return ranked scoring breakdown for v05_basic candidate cards."""
+
+        return [
+            ranked.candidate
+            for ranked in _rank_v05_basic_candidates(player, hand, game_state)
         ]
-        lowest_hand_comparison = min(
-            comparison
-            for _, comparison, _ in evaluated_cards
-        )
-        affamato_remaining = config.critical_wounds_limit - player.critical_wounds
-        near_abandonment = affamato_remaining <= 1
-        cautious = affamato_remaining <= 2
-
-        def score(card_data: tuple[Card, int, int]) -> tuple[float, int, int, int, int]:
-            card, comparison, consumption = card_data
-            points = comparison * 3.0
-            points -= consumption * 2.0
-
-            low_comparison_penalty = max(0, 4 - comparison) * 2.0
-            if comparison == lowest_hand_comparison:
-                low_comparison_penalty += 3.0
-            if near_abandonment:
-                low_comparison_penalty *= 3.0
-            elif cautious:
-                low_comparison_penalty *= 1.8
-            if alive_players_count <= 2:
-                low_comparison_penalty *= 0.8
-            points -= low_comparison_penalty
-
-            if consumption >= player.lives:
-                points -= 100.0
-            else:
-                remaining_lives = player.lives - consumption
-                if remaining_lives <= 1:
-                    points -= 18.0
-                elif remaining_lives <= 2:
-                    points -= 9.0
-
-            return (
-                points,
-                -consumption,
-                comparison,
-                -card.value,
-                -_color_order(card.color),
-            )
-
-        return max(evaluated_cards, key=score)[0]
 
 
 class V05BalancedStrategy(BaseStrategy):
@@ -394,57 +630,20 @@ class V05BalancedStrategy(BaseStrategy):
     ) -> Card:
         """Choose a card using a conservative Scorte/Affamato balance."""
 
-        config = _game_config(game_state)
-        evaluated_cards = [
-            (
-                card,
-                get_effective_comparison_value(player, card, config),
-                get_effective_consumption_value(player, card, config),
-            )
-            for card in hand
+        return _rank_v05_balanced_candidates(player, hand, game_state)[0].card
+
+    def evaluate_candidates(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+    ) -> list[StrategyDecisionCandidate]:
+        """Return ranked scoring breakdown for v05_balanced candidate cards."""
+
+        return [
+            ranked.candidate
+            for ranked in _rank_v05_balanced_candidates(player, hand, game_state)
         ]
-        lowest_hand_comparison = min(
-            comparison
-            for _, comparison, _ in evaluated_cards
-        )
-        affamato_remaining = config.critical_wounds_limit - player.critical_wounds
-        near_abandonment = affamato_remaining <= 1
-        cautious = affamato_remaining <= 2
-
-        def score(card_data: tuple[Card, int, int]) -> tuple[float, int, int, int, int]:
-            card, comparison, consumption = card_data
-            points = min(comparison, 4) * 2.4
-            points -= consumption * 3.0
-
-            low_comparison_penalty = max(0, 3 - comparison) * 1.5
-            if comparison == lowest_hand_comparison:
-                low_comparison_penalty += 2.0
-            if near_abandonment:
-                low_comparison_penalty *= 2.0
-            elif cautious:
-                low_comparison_penalty *= 1.4
-            points -= low_comparison_penalty
-
-            if consumption >= player.lives:
-                points -= 120.0
-            else:
-                remaining_lives = player.lives - consumption
-                if remaining_lives <= 1:
-                    points -= 24.0
-                elif remaining_lives <= 2:
-                    points -= 12.0
-                elif remaining_lives <= 3:
-                    points -= 4.0
-
-            return (
-                points,
-                -consumption,
-                comparison,
-                -card.value,
-                -_color_order(card.color),
-            )
-
-        return max(evaluated_cards, key=score)[0]
 
 
 class AdaptivePressureStrategy(BaseStrategy):

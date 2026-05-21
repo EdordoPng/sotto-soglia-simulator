@@ -38,6 +38,30 @@ def _v05_game_state(*players, config=None):
     }
 
 
+def _candidate_card_tuple(candidate):
+    return (
+        candidate.candidate_card_color,
+        candidate.candidate_card_value,
+    )
+
+
+def _card_tuple(card):
+    return (
+        card.color.name,
+        card.value,
+    )
+
+
+def _assert_single_chosen_with_consecutive_ranks(candidates):
+    chosen = [candidate for candidate in candidates if candidate.chosen]
+
+    assert len(chosen) == 1
+    assert chosen[0].choice_rank == 1
+    assert sorted(candidate.choice_rank for candidate in candidates) == list(
+        range(1, len(candidates) + 1)
+    )
+
+
 def test_create_strategy_builds_all_available_strategies():
     for strategy_name in [
         "random",
@@ -168,6 +192,46 @@ def test_v05_basic_strategy_returns_card_from_hand():
     assert selected in hand
 
 
+def test_v05_basic_evaluate_candidates_returns_one_candidate_per_card():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+
+    candidates = V05BasicStrategy().evaluate_candidates(
+        player,
+        hand,
+        _v05_game_state(player, opponent),
+    )
+
+    assert len(candidates) == len(hand)
+    assert {_candidate_card_tuple(candidate) for candidate in candidates} == {
+        _card_tuple(card)
+        for card in hand
+    }
+    _assert_single_chosen_with_consecutive_ranks(candidates)
+
+
+def test_v05_basic_evaluate_candidates_chosen_matches_choose_card():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+    strategy = V05BasicStrategy()
+
+    selected = strategy.choose_card(player, hand, _v05_game_state(player, opponent), Random(1))
+    candidates = strategy.evaluate_candidates(player, hand, _v05_game_state(player, opponent))
+    chosen = next(candidate for candidate in candidates if candidate.chosen)
+
+    assert _candidate_card_tuple(chosen) == _card_tuple(selected)
+
+
 def test_v05_basic_uses_effective_comparison_value():
     config = GameConfig(
         color_effects_enabled=False,
@@ -189,6 +253,27 @@ def test_v05_basic_uses_effective_comparison_value():
     assert selected == scatto
 
 
+def test_v05_basic_candidate_uses_effective_comparison_value():
+    config = GameConfig(
+        color_effects_enabled=False,
+        animal_card_effects_enabled=True,
+    )
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+
+    candidates = V05BasicStrategy().evaluate_candidates(
+        player,
+        [Card(Color.RED, 1), Card(Color.BLUE, 1)],
+        _v05_game_state(player, opponent, config=config),
+    )
+    by_card = {
+        _candidate_card_tuple(candidate): candidate
+        for candidate in candidates
+    }
+
+    assert by_card[("RED", 1)].effective_comparison == 2
+
+
 def test_v05_basic_uses_effective_consumption_value():
     config = GameConfig(
         color_effects_enabled=False,
@@ -208,6 +293,27 @@ def test_v05_basic_uses_effective_consumption_value():
     )
 
     assert selected == passo_leggero
+
+
+def test_v05_basic_candidate_uses_effective_consumption_value():
+    config = GameConfig(
+        color_effects_enabled=False,
+        animal_card_effects_enabled=True,
+    )
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+
+    candidates = V05BasicStrategy().evaluate_candidates(
+        player,
+        [Card(Color.RED, 2), Card(Color.BLUE, 2)],
+        _v05_game_state(player, opponent, config=config),
+    )
+    by_card = {
+        _candidate_card_tuple(candidate): candidate
+        for candidate in candidates
+    }
+
+    assert by_card[("RED", 2)].effective_consumption == 1
 
 
 def test_v05_basic_avoids_lethal_consumption_when_possible():
@@ -346,6 +452,46 @@ def test_v05_balanced_strategy_returns_card_from_hand():
     assert selected in hand
 
 
+def test_v05_balanced_evaluate_candidates_returns_one_candidate_per_card():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+
+    candidates = V05BalancedStrategy().evaluate_candidates(
+        player,
+        hand,
+        _v05_game_state(player, opponent),
+    )
+
+    assert len(candidates) == len(hand)
+    assert {_candidate_card_tuple(candidate) for candidate in candidates} == {
+        _card_tuple(card)
+        for card in hand
+    }
+    _assert_single_chosen_with_consecutive_ranks(candidates)
+
+
+def test_v05_balanced_evaluate_candidates_chosen_matches_choose_card():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+    strategy = V05BalancedStrategy()
+
+    selected = strategy.choose_card(player, hand, _v05_game_state(player, opponent), Random(1))
+    candidates = strategy.evaluate_candidates(player, hand, _v05_game_state(player, opponent))
+    chosen = next(candidate for candidate in candidates if candidate.chosen)
+
+    assert _candidate_card_tuple(chosen) == _card_tuple(selected)
+
+
 def test_v05_balanced_uses_effective_comparison_value():
     config = GameConfig(
         color_effects_enabled=False,
@@ -366,6 +512,27 @@ def test_v05_balanced_uses_effective_comparison_value():
     assert selected == scatto
 
 
+def test_v05_balanced_candidate_uses_effective_comparison_value():
+    config = GameConfig(
+        color_effects_enabled=False,
+        animal_card_effects_enabled=True,
+    )
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+
+    candidates = V05BalancedStrategy().evaluate_candidates(
+        player,
+        [Card(Color.RED, 1), Card(Color.BLUE, 1)],
+        _v05_game_state(player, opponent, config=config),
+    )
+    by_card = {
+        _candidate_card_tuple(candidate): candidate
+        for candidate in candidates
+    }
+
+    assert by_card[("RED", 1)].effective_comparison == 2
+
+
 def test_v05_balanced_uses_effective_consumption_value():
     config = GameConfig(
         color_effects_enabled=False,
@@ -384,6 +551,27 @@ def test_v05_balanced_uses_effective_consumption_value():
     )
 
     assert selected == passo_leggero
+
+
+def test_v05_balanced_candidate_uses_effective_consumption_value():
+    config = GameConfig(
+        color_effects_enabled=False,
+        animal_card_effects_enabled=True,
+    )
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+
+    candidates = V05BalancedStrategy().evaluate_candidates(
+        player,
+        [Card(Color.RED, 2), Card(Color.BLUE, 2)],
+        _v05_game_state(player, opponent, config=config),
+    )
+    by_card = {
+        _candidate_card_tuple(candidate): candidate
+        for candidate in candidates
+    }
+
+    assert by_card[("RED", 2)].effective_consumption == 1
 
 
 def test_v05_balanced_avoids_lethal_consumption_when_possible():
@@ -471,6 +659,104 @@ def test_v05_balanced_is_not_too_passive_on_affamato_near_limit():
     assert selected == sustainable_safer
 
 
+def test_v05_candidate_display_colors_and_animals_are_correct():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.BLUE, 2),
+        Card(Color.RED, 2),
+        Card(Color.GREEN, 2),
+        Card(Color.YELLOW, 2),
+    ]
+
+    candidates = V05BalancedStrategy().evaluate_candidates(
+        player,
+        hand,
+        _v05_game_state(player, opponent),
+    )
+    by_color = {
+        candidate.candidate_card_color: candidate
+        for candidate in candidates
+    }
+
+    assert by_color["BLUE"].candidate_card_display_color == "green"
+    assert by_color["BLUE"].candidate_card_animal == "Panda"
+    assert by_color["RED"].candidate_card_display_color == "orange"
+    assert by_color["RED"].candidate_card_animal == "Coniglio"
+    assert by_color["GREEN"].candidate_card_display_color == "yellow"
+    assert by_color["GREEN"].candidate_card_animal == "Scimmia"
+    assert by_color["YELLOW"].candidate_card_display_color == "brown"
+    assert by_color["YELLOW"].candidate_card_animal == "Scoiattolo"
+
+
+def test_v05_candidate_reason_flags_include_clear_audit_flags():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(
+        player_id=1,
+        color=Color.BLUE,
+        lives=2,
+        critical_wounds=config.critical_wounds_limit - 1,
+    )
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.GREEN, 3),
+    ]
+
+    candidates = V05BalancedStrategy().evaluate_candidates(
+        player,
+        hand,
+        _v05_game_state(player, opponent, config=config),
+    )
+    by_card = {
+        _candidate_card_tuple(candidate): candidate
+        for candidate in candidates
+    }
+
+    low_card_flags = set(by_card[("RED", 1)].reason_flags)
+    lethal_card_flags = set(by_card[("GREEN", 3)].reason_flags)
+    assert "lowest_comparison" in low_card_flags
+    assert "near_abandonment" in low_card_flags
+    assert "remaining_lives_1" in low_card_flags
+    assert "low_consumption" in low_card_flags
+    assert "lethal_consumption" in lethal_card_flags
+    assert "near_abandonment" in lethal_card_flags
+
+
+def test_v05_candidate_scores_are_deterministic():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.YELLOW, 3),
+        Card(Color.GREEN, 3),
+    ]
+    strategy = V05BalancedStrategy()
+    game_state = _v05_game_state(player, opponent)
+
+    first = strategy.evaluate_candidates(player, hand, game_state)
+    second = strategy.evaluate_candidates(player, hand, game_state)
+
+    assert [
+        (
+            candidate.candidate_card_color,
+            candidate.candidate_card_value,
+            candidate.score,
+            candidate.choice_rank,
+            candidate.chosen,
+        )
+        for candidate in first
+    ] == [
+        (
+            candidate.candidate_card_color,
+            candidate.candidate_card_value,
+            candidate.score,
+            candidate.choice_rank,
+            candidate.chosen,
+        )
+        for candidate in second
+    ]
+
+
 def test_v05_balanced_tie_break_is_deterministic():
     player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
     opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
@@ -491,6 +777,28 @@ def test_v05_balanced_tie_break_is_deterministic():
     ]
 
     assert selected_cards == [Card(Color.GREEN, 3)] * 5
+
+
+def test_legacy_strategies_keep_default_empty_candidate_evaluation():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+    ]
+
+    for strategy_name in [
+        "random",
+        "prudent",
+        "defensive",
+        "aggressive",
+        "anti_critical",
+        "mixed",
+        "adaptive_pressure",
+        "critical_adaptive",
+    ]:
+        strategy = create_strategy(strategy_name)
+
+        assert strategy.evaluate_candidates(player, hand, None) == []
 
 
 def test_simulation_runner_smoke_with_v05_balanced_strategy():
