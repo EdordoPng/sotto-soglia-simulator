@@ -61,6 +61,7 @@ class PlayerState:
     critical_cards_drawn: list[str] = field(default_factory=list)
     active_critical_effects: list[str] = field(default_factory=list)
     consumed_critical_effects: list[str] = field(default_factory=list)
+    active_animal_effects: list[str] = field(default_factory=list)
     life_gained_from_critical_cards: int = 0
     life_lost_from_critical_cards: int = 0
     damage_prevented_by_critical_cards: int = 0

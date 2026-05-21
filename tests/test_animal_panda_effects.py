@@ -10,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import RAZIONE_RISPARMIATA, V05_HUNGER_DECK_PROFILE_ID
+from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO
 from sotto_soglia.models import Card, Color, EliminationReason, PlayerState
 import sotto_soglia.round as round_module
 from sotto_soglia.round import resolve_round
@@ -277,6 +278,205 @@ def test_respiro_lento_consumption_never_drops_below_one():
     assert get_effective_consumption_value(player, card, _animal_config()) == 1
 
 
+def test_grande_letargo_registers_next_round_without_changing_current_comparison():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 5),
+        2: Card(Color.RED, 4),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.lowest_value == 5
+    assert result.critical_wound_players == [1, 2]
+    assert players[0].active_animal_effects == [PANDA_GRANDE_LETARGO]
+    assert result.base_damage_by_player[1] == 0
+
+
+def test_grande_letargo_registers_even_when_panda_receives_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 5),
+        2: Card(Color.RED, 4),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert 1 in result.critical_wound_players
+    assert result.base_damage_by_player[1] == 0
+    assert players[0].active_animal_effects == [PANDA_GRANDE_LETARGO]
+
+
+def test_grande_letargo_active_sets_panda_five_comparison_to_three_and_keeps_consumption():
+    player = PlayerState(
+        player_id=1,
+        color=Color.BLUE,
+        lives=12,
+        active_animal_effects=[PANDA_GRANDE_LETARGO],
+    )
+    card = Card(Color.BLUE, 5)
+
+    assert get_effective_comparison_value(player, card, _animal_config()) == 3
+    assert get_effective_consumption_value(player, card, _animal_config()) == 5
+
+
+def test_grande_letargo_active_sets_panda_one_comparison_to_three_and_keeps_consumption():
+    player = PlayerState(
+        player_id=1,
+        color=Color.BLUE,
+        lives=12,
+        active_animal_effects=[PANDA_GRANDE_LETARGO],
+    )
+    card = Card(Color.BLUE, 1)
+
+    assert get_effective_comparison_value(player, card, _animal_config()) == 3
+    assert get_effective_consumption_value(player, card, _animal_config()) == 1
+
+
+def test_grande_letargo_active_applies_to_non_panda_card_without_grande_balzo():
+    player = PlayerState(
+        player_id=1,
+        color=Color.BLUE,
+        lives=12,
+        active_animal_effects=[PANDA_GRANDE_LETARGO],
+    )
+    card = Card(Color.RED, 4)
+
+    assert get_effective_comparison_value(player, card, _animal_config()) == 3
+    assert get_effective_consumption_value(player, card, _animal_config()) == 4
+
+
+def test_grande_letargo_is_consumed_after_next_round():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_animal_effects=[PANDA_GRANDE_LETARGO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 2),
+        2: Card(Color.BLUE, 1),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.lowest_value == 1
+    assert result.base_damage_by_player[1] == 2
+    assert players[0].active_animal_effects == []
+
+
+def test_grande_letargo_does_not_apply_twice():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_animal_effects=[PANDA_GRANDE_LETARGO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    first_result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 2),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+    second_result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 2),
+            2: Card(Color.RED, 4),
+        },
+        _animal_config(),
+    )
+
+    assert first_result.lowest_value == 1
+    assert second_result.lowest_value == 2
+    assert second_result.critical_wound_players == [1]
+    assert players[0].active_animal_effects == []
+
+
+def test_grande_letargo_does_not_modify_consumption_in_round_resolution():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.BLUE,
+            lives=12,
+            active_animal_effects=[PANDA_GRANDE_LETARGO],
+        ),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 5),
+            2: Card(Color.RED, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 5
+    assert players[0].lives == 7
+
+
+def test_grande_letargo_active_keeps_respiro_lento_consumption_reduction():
+    player = PlayerState(
+        player_id=1,
+        color=Color.BLUE,
+        lives=12,
+        active_animal_effects=[PANDA_GRANDE_LETARGO],
+    )
+    card = Card(Color.BLUE, 3)
+
+    assert get_effective_comparison_value(player, card, _animal_config()) == 3
+    assert get_effective_consumption_value(player, card, _animal_config()) == 2
+
+
+def test_grande_letargo_is_inactive_when_other_animals_play_panda_five():
+    for color in (Color.RED, Color.GREEN, Color.YELLOW):
+        players = [
+            PlayerState(player_id=1, color=color, lives=12),
+            PlayerState(player_id=2, color=Color.BLUE, lives=12),
+        ]
+        selected_cards = {
+            1: Card(Color.BLUE, 5),
+            2: Card(Color.RED, 1),
+        }
+
+        resolve_round(players, selected_cards, _animal_config())
+
+        assert players[0].active_animal_effects == []
+
+
+def test_grande_letargo_is_inactive_when_animal_effects_are_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 5),
+        2: Card(Color.RED, 1),
+    }
+
+    resolve_round(players, selected_cards, GameConfig(color_effects_enabled=False))
+
+    assert players[0].active_animal_effects == []
+
+
 def test_coniglio_effects_continue_to_use_their_effective_values():
     coniglio = PlayerState(player_id=1, color=Color.RED, lives=12)
 
@@ -297,7 +497,7 @@ def test_coniglio_effects_continue_to_use_their_effective_values():
     ) == 5
 
 
-def test_panda_one_and_unimplemented_panda_five_keep_standard_values():
+def test_panda_one_and_inactive_panda_five_keep_standard_values():
     player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
 
     assert get_effective_consumption_value(

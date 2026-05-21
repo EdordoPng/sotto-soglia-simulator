@@ -9,6 +9,7 @@ from sotto_soglia.animal_effects import (
     CONIGLIO_GRANDE_BALZO,
     CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
+    PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
     get_effect_id_for_card,
     is_own_animal_card_effect_active,
@@ -71,6 +72,12 @@ def get_effective_comparison_value(
     config: GameConfig,
 ) -> int:
     """Return the comparison value for a card as played by one player."""
+
+    if (
+        config.animal_card_effects_enabled
+        and PANDA_GRANDE_LETARGO in player.active_animal_effects
+    ):
+        return 3
 
     effect_id = get_active_own_animal_effect_id(player, card, config)
     if effect_id == CONIGLIO_SCATTO_IMPROVVISO:

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from collections.abc import Iterable, Mapping
 from random import Random
 
-from sotto_soglia.animal_effects import PANDA_RIPOSO_FORZATO
+from sotto_soglia.animal_effects import PANDA_GRANDE_LETARGO, PANDA_RIPOSO_FORZATO
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
@@ -131,6 +131,12 @@ def resolve_round(
                 for player_id, player in player_map.items()
             }
         _validate_active_critical_effects_for_profile(active_effects_by_player, config)
+    active_animal_effects_by_player: dict[int, list[str]] = {}
+    if config.animal_card_effects_enabled:
+        active_animal_effects_by_player = {
+            player_id: list(player.active_animal_effects)
+            for player_id, player in player_map.items()
+        }
     critical_events = list(preliminary_critical_events or [])
     critical_life_delta_by_player = {player_id: 0 for player_id in player_map}
     pending_life_recoveries = {player_id: 0 for player_id in player_map}
@@ -189,6 +195,11 @@ def resolve_round(
         selected_cards=selected_cards,
         config=config,
         pending_life_recoveries=pending_animal_life_recoveries,
+    )
+    _schedule_next_round_animal_effects(
+        player_map=player_map,
+        selected_cards=selected_cards,
+        config=config,
     )
 
     base_damage_by_player = {
@@ -293,6 +304,8 @@ def resolve_round(
 
     if config.critical_card_effects_enabled:
         _consume_active_critical_effects(player_map, active_effects_by_player)
+    if config.animal_card_effects_enabled:
+        _consume_active_animal_effects(player_map, active_animal_effects_by_player)
 
     lives_after = {
         player_id: player.lives
@@ -450,6 +463,20 @@ def _schedule_animal_life_recoveries(
         effect_id = get_active_own_animal_effect_id(player, card, config)
         if effect_id == PANDA_RIPOSO_FORZATO:
             schedule_life_recovery(pending_life_recoveries, player_id, 1)
+
+
+def _schedule_next_round_animal_effects(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+) -> None:
+    """Register supported next-round animal-card effects."""
+
+    for player_id, card in selected_cards.items():
+        player = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(player, card, config)
+        if effect_id == PANDA_GRANDE_LETARGO:
+            player.active_animal_effects.append(PANDA_GRANDE_LETARGO)
 
 
 def schedule_life_recovery(
@@ -1023,3 +1050,16 @@ def _consume_active_critical_effects(
             if effect_id in player.active_critical_effects:
                 player.active_critical_effects.remove(effect_id)
                 player.consumed_critical_effects.append(effect_id)
+
+
+def _consume_active_animal_effects(
+    player_map: dict[int, PlayerState],
+    active_effects_by_player: Mapping[int, list[str]],
+) -> None:
+    """Consume animal effects that were active at the start of the round."""
+
+    for player_id, effects in active_effects_by_player.items():
+        player = player_map[player_id]
+        for effect_id in effects:
+            if effect_id in player.active_animal_effects:
+                player.active_animal_effects.remove(effect_id)
