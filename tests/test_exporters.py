@@ -9,7 +9,12 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.critical import V05_HUNGER_CARD_IDS, V05_HUNGER_DECK_PROFILE_ID
+from sotto_soglia.critical import (
+    CRITICAL_CARD_IDS,
+    LEGACY_CRITICAL_DECK_PROFILE_ID,
+    V05_HUNGER_CARD_IDS,
+    V05_HUNGER_DECK_PROFILE_ID,
+)
 from sotto_soglia.config import GameConfig
 from sotto_soglia.exporters import CSV_DELIMITER, export_simulation_result
 from sotto_soglia.simulation import SimulationRunner
@@ -169,11 +174,63 @@ def test_critical_card_stats_csv_includes_v05_hunger_cards_only_for_v05_deck(
         rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
 
     rows_by_card = {row["card_id"]: row for row in rows}
-    assert set(V05_HUNGER_CARD_IDS).issubset(rows_by_card)
+    assert set(rows_by_card) == set(V05_HUNGER_CARD_IDS)
     assert any(
         int(rows_by_card[card_id]["draw_count"]) > 0
         for card_id in V05_HUNGER_CARD_IDS
     )
+
+
+def test_critical_card_stats_csv_includes_legacy_cards_only_for_legacy_deck(
+    tmp_path,
+):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        config=GameConfig(critical_card_effects_enabled=True),
+    )
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["critical_card_stats"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    rows_by_card = {row["card_id"]: row for row in rows}
+    assert simulation.critical_deck_profile_id == LEGACY_CRITICAL_DECK_PROFILE_ID
+    assert set(rows_by_card) == set(CRITICAL_CARD_IDS)
+    assert set(V05_HUNGER_CARD_IDS).isdisjoint(rows_by_card)
+
+
+def test_critical_card_stats_csv_keeps_active_profile_cards_with_zero_draws(
+    tmp_path,
+):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        config=GameConfig(
+            critical_card_effects_enabled=True,
+            critical_deck_order=tuple(
+                card_id
+                for card_id in CRITICAL_CARD_IDS
+                for _ in range(2)
+            ),
+        ),
+    )
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["critical_card_stats"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    rows_by_card = {row["card_id"]: row for row in rows}
+    assert set(rows_by_card) == set(CRITICAL_CARD_IDS)
+    assert any(int(row["draw_count"]) == 0 for row in rows)
 
 
 def test_critical_events_csv_contains_only_known_v05_hunger_cards_when_drawn(

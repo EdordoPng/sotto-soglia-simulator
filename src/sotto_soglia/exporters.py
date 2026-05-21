@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sotto_soglia import __version__
+from sotto_soglia.critical import get_critical_deck_profile
 from sotto_soglia.models import EliminationReason, PlayerState
 from sotto_soglia.parametric import ParametricSimulationResult
 from sotto_soglia.simulation import SimulationResult
@@ -479,12 +480,14 @@ def write_critical_card_stats_csv(
         "elimination_count_after_draw",
     ]
     card_stats = simulation_result.aggregate_stats.get("critical_card_stats", {})
+    profile = get_critical_deck_profile(simulation_result.critical_deck_profile_id)
 
     with Path(path).open("w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
         writer.writeheader()
 
-        for card_id, values in sorted(card_stats.items()):
+        for card_id in profile.card_ids:
+            values = card_stats.get(card_id, {})
             writer.writerow(
                 {
                     "card_id": card_id,
