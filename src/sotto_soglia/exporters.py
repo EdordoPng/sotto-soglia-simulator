@@ -37,6 +37,7 @@ def export_simulation_result(
         "games_summary": output_path / "games_summary.csv",
         "rounds_summary": output_path / "rounds_summary.csv",
         "animal_effect_events": output_path / "animal_effect_events.csv",
+        "strategy_decision_events": output_path / "strategy_decision_events.csv",
     }
     if simulation_result.critical_card_effects_enabled:
         paths.update(
@@ -74,6 +75,10 @@ def export_simulation_result(
     write_games_summary_csv(paths["games_summary"], simulation_result)
     write_rounds_summary_csv(paths["rounds_summary"], simulation_result)
     write_animal_effect_events_csv(paths["animal_effect_events"], simulation_result)
+    write_strategy_decision_events_csv(
+        paths["strategy_decision_events"],
+        simulation_result,
+    )
     if simulation_result.critical_card_effects_enabled:
         write_critical_events_csv(paths["critical_events"], simulation_result)
         write_critical_deck_orders_csv(paths["critical_deck_orders"], simulation_result)
@@ -579,6 +584,72 @@ def write_animal_effect_events_csv(
                             "amount": _optional_csv_value(event.amount),
                             "actual_amount": _optional_csv_value(event.actual_amount),
                             "reason": _optional_csv_value(event.reason),
+                        }
+                    )
+
+
+def write_strategy_decision_events_csv(
+    path: str | Path,
+    simulation_result: SimulationResult,
+) -> None:
+    """Write one row per strategy-decision candidate card."""
+
+    fieldnames = [
+        "game_index",
+        "round_number",
+        "player_id",
+        "technical_color",
+        "animal",
+        "display_color",
+        "strategy_name",
+        "lives",
+        "critical_wounds",
+        "critical_wounds_limit",
+        "alive_players_count",
+        "candidate_card_color",
+        "candidate_card_display_color",
+        "candidate_card_animal",
+        "candidate_card_value",
+        "effective_comparison",
+        "effective_consumption",
+        "score",
+        "chosen",
+        "choice_rank",
+        "reason_flags",
+    ]
+
+    with Path(path).open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=CSV_DELIMITER)
+        writer.writeheader()
+
+        for game_result in simulation_result.game_results:
+            for event in game_result.strategy_decision_events:
+                for candidate in event.candidates:
+                    writer.writerow(
+                        {
+                            "game_index": event.game_index,
+                            "round_number": event.round_number,
+                            "player_id": event.player_id,
+                            "technical_color": event.technical_color,
+                            "animal": event.animal,
+                            "display_color": event.display_color,
+                            "strategy_name": event.strategy_name,
+                            "lives": event.lives,
+                            "critical_wounds": event.critical_wounds,
+                            "critical_wounds_limit": event.critical_wounds_limit,
+                            "alive_players_count": event.alive_players_count,
+                            "candidate_card_color": candidate.candidate_card_color,
+                            "candidate_card_display_color": (
+                                candidate.candidate_card_display_color
+                            ),
+                            "candidate_card_animal": candidate.candidate_card_animal,
+                            "candidate_card_value": candidate.candidate_card_value,
+                            "effective_comparison": candidate.effective_comparison,
+                            "effective_consumption": candidate.effective_consumption,
+                            "score": candidate.score,
+                            "chosen": candidate.chosen,
+                            "choice_rank": candidate.choice_rank,
+                            "reason_flags": "|".join(candidate.reason_flags),
                         }
                     )
 

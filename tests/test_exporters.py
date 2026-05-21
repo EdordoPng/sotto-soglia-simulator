@@ -36,6 +36,7 @@ from sotto_soglia.game import GameResult
 from sotto_soglia.models import Color, PlayerState
 from sotto_soglia.round import RoundResult
 from sotto_soglia.simulation import SimulationResult, SimulationRunner
+from sotto_soglia.strategies import create_strategy
 
 
 def _small_simulation():
@@ -62,6 +63,30 @@ ANIMAL_EFFECT_EVENT_FIELDS = [
     "reason",
 ]
 
+STRATEGY_DECISION_EVENT_FIELDS = [
+    "game_index",
+    "round_number",
+    "player_id",
+    "technical_color",
+    "animal",
+    "display_color",
+    "strategy_name",
+    "lives",
+    "critical_wounds",
+    "critical_wounds_limit",
+    "alive_players_count",
+    "candidate_card_color",
+    "candidate_card_display_color",
+    "candidate_card_animal",
+    "candidate_card_value",
+    "effective_comparison",
+    "effective_consumption",
+    "score",
+    "chosen",
+    "choice_rank",
+    "reason_flags",
+]
+
 
 def test_export_creates_expected_files(tmp_path):
     simulation = _small_simulation()
@@ -73,6 +98,7 @@ def test_export_creates_expected_files(tmp_path):
     assert exported_files["games_summary"].exists()
     assert exported_files["rounds_summary"].exists()
     assert exported_files["animal_effect_events"].exists()
+    assert exported_files["strategy_decision_events"].exists()
 
 
 def test_aggregate_stats_json_is_valid(tmp_path):
@@ -114,6 +140,9 @@ def test_simulation_config_json_is_valid(tmp_path):
     assert data["generated_files"]["games_summary"] == "games_summary.csv"
     assert data["generated_files"]["animal_effect_events"] == (
         "animal_effect_events.csv"
+    )
+    assert data["generated_files"]["strategy_decision_events"] == (
+        "strategy_decision_events.csv"
     )
     assert data["generated_files"]["critical_events"] == "critical_events.csv"
     assert data["generated_files"]["critical_deck_orders"] == "critical_deck_orders.csv"
@@ -413,6 +442,120 @@ def test_animal_effect_events_csv_is_created_with_header_when_empty(tmp_path):
 
     assert reader.fieldnames == ANIMAL_EFFECT_EVENT_FIELDS
     assert rows == []
+
+
+def test_strategy_decision_events_csv_is_created_with_header_when_empty(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        strategies=create_strategy("random"),
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["strategy_decision_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        reader = csv.DictReader(file, delimiter=CSV_DELIMITER)
+        rows = list(reader)
+
+    assert reader.fieldnames == STRATEGY_DECISION_EVENT_FIELDS
+    assert rows == []
+
+
+def test_strategy_decision_events_csv_exports_v05_balanced_candidate_rows(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        strategies=create_strategy("v05_balanced"),
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["strategy_decision_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        reader = csv.DictReader(file, delimiter=CSV_DELIMITER)
+        rows = list(reader)
+
+    assert reader.fieldnames == STRATEGY_DECISION_EVENT_FIELDS
+    assert rows
+
+    first_row = rows[0]
+    for field in STRATEGY_DECISION_EVENT_FIELDS:
+        assert field in first_row
+    assert first_row["game_index"]
+    assert first_row["round_number"]
+    assert first_row["player_id"]
+    assert first_row["strategy_name"] == "v05_balanced"
+    assert first_row["technical_color"] in {"BLUE", "RED", "GREEN", "YELLOW"}
+    assert first_row["animal"] in {"Panda", "Coniglio", "Scimmia", "Scoiattolo"}
+    assert first_row["display_color"] in {"green", "orange", "yellow", "brown"}
+    assert first_row["candidate_card_color"] in {"BLUE", "RED", "GREEN", "YELLOW"}
+    assert first_row["candidate_card_display_color"] in {
+        "green",
+        "orange",
+        "yellow",
+        "brown",
+    }
+    assert first_row["candidate_card_animal"] in {
+        "Panda",
+        "Coniglio",
+        "Scimmia",
+        "Scoiattolo",
+    }
+    assert first_row["candidate_card_value"]
+    assert first_row["effective_comparison"]
+    assert first_row["effective_consumption"]
+    assert first_row["score"]
+    assert first_row["chosen"] in {"True", "False"}
+    assert first_row["choice_rank"]
+
+
+def test_strategy_decision_events_csv_has_valid_chosen_and_rank_groups(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        strategies=create_strategy("v05_balanced"),
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["strategy_decision_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    rows_by_decision = {}
+    for row in rows:
+        key = (row["game_index"], row["round_number"], row["player_id"])
+        rows_by_decision.setdefault(key, []).append(row)
+
+    assert rows_by_decision
+    saw_pipe_separated_reason_flags = False
+    for decision_rows in rows_by_decision.values():
+        chosen_rows = [
+            row
+            for row in decision_rows
+            if row["chosen"] == "True"
+        ]
+        assert len(chosen_rows) == 1
+        assert chosen_rows[0]["choice_rank"] == "1"
+        assert sorted(int(row["choice_rank"]) for row in decision_rows) == list(
+            range(1, len(decision_rows) + 1)
+        )
+        saw_pipe_separated_reason_flags = saw_pipe_separated_reason_flags or any(
+            "|" in row["reason_flags"]
+            for row in decision_rows
+        )
+
+    assert saw_pipe_separated_reason_flags
 
 
 def test_animal_effect_events_csv_exports_scatto_improvviso(tmp_path):
