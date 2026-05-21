@@ -46,6 +46,7 @@ def export_simulation_result(
         "base_seed": simulation_result.base_seed,
         "initial_lives": simulation_result.initial_lives,
         "critical_wounds_limit": simulation_result.critical_wounds_limit,
+        "cards_per_player": simulation_result.cards_per_player,
         "color_effects_enabled": simulation_result.color_effects_enabled,
         "critical_card_effects_enabled": simulation_result.critical_card_effects_enabled,
         "animal_card_effects_enabled": simulation_result.animal_card_effects_enabled,

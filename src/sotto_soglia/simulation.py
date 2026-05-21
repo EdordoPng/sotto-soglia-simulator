@@ -20,6 +20,7 @@ class SimulationResult:
     aggregate_stats: dict = field(default_factory=dict)
     initial_lives: int = 18
     critical_wounds_limit: int = 3
+    cards_per_player: int = 3
     color_effects_enabled: bool = True
     critical_card_effects_enabled: bool = False
     animal_card_effects_enabled: bool = False
@@ -72,6 +73,7 @@ class SimulationRunner:
             aggregate_stats=aggregate_stats,
             initial_lives=config.initial_lives,
             critical_wounds_limit=config.critical_wounds_limit,
+            cards_per_player=config.cards_per_player,
             color_effects_enabled=config.color_effects_enabled,
             critical_card_effects_enabled=config.critical_card_effects_enabled,
             animal_card_effects_enabled=config.animal_card_effects_enabled,

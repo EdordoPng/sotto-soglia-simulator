@@ -26,6 +26,7 @@ def test_simulation_runner_returns_ten_results_for_two_players():
     assert result.critical_card_effects_enabled is True
     assert result.animal_card_effects_enabled is True
     assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+    assert result.cards_per_player == 3
 
 
 def test_simulation_runner_returns_ten_results_for_four_players():
