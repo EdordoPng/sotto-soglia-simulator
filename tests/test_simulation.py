@@ -135,6 +135,11 @@ def test_simulation_runner_smoke_with_animal_card_effects_enabled():
     assert result.critical_card_effects_enabled is True
     assert result.animal_card_effects_enabled is True
     assert result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+    assert all(hasattr(game_result, "animal_events") for game_result in result.game_results)
+    assert all(
+        isinstance(game_result.animal_events, list)
+        for game_result in result.game_results
+    )
 
 
 def test_simulation_runner_smoke_with_animal_card_effects_disabled():

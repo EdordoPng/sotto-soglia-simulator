@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from random import Random
 
 from sotto_soglia.animal_effects import (
+    AnimalEffectEvent,
     SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
 )
@@ -42,6 +43,7 @@ class GameResult:
     initial_critical_deck_order: list[str] = field(default_factory=list)
     remaining_critical_deck: list[str] = field(default_factory=list)
     critical_events: list[CriticalCardEvent] = field(default_factory=list)
+    animal_events: list[AnimalEffectEvent] = field(default_factory=list)
 
 
 def create_players(players_count: int, config: GameConfig) -> list[PlayerState]:
@@ -373,6 +375,7 @@ def play_game(
     critical_deck = _build_game_critical_deck(config, seed, game_id)
     initial_critical_deck_order = list(critical_deck)
     critical_events: list[CriticalCardEvent] = []
+    animal_events: list[AnimalEffectEvent] = []
 
     while len([player for player in players if player.is_alive]) > 1:
         if len(round_history) >= max_rounds:
@@ -434,6 +437,7 @@ def play_game(
         )
         round_history.append(round_result)
         critical_events.extend(round_result.critical_events)
+        animal_events.extend(round_result.animal_events)
         elimination_order.extend(round_result.eliminated_players)
 
         alive_after = [
@@ -456,6 +460,7 @@ def play_game(
                 initial_critical_deck_order=initial_critical_deck_order,
                 remaining_critical_deck=list(critical_deck),
                 critical_events=critical_events,
+                animal_events=animal_events,
             )
 
         if not alive_after:
@@ -476,6 +481,7 @@ def play_game(
                 initial_critical_deck_order=initial_critical_deck_order,
                 remaining_critical_deck=list(critical_deck),
                 critical_events=critical_events,
+                animal_events=animal_events,
             )
 
     alive_players = [player.player_id for player in players if player.is_alive]
@@ -492,4 +498,5 @@ def play_game(
         initial_critical_deck_order=initial_critical_deck_order,
         remaining_critical_deck=list(critical_deck),
         critical_events=critical_events,
+        animal_events=animal_events,
     )
