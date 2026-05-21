@@ -29,6 +29,7 @@ from sotto_soglia.critical import (
     FERITA_ESPOSTA,
     MORSO_DELLA_FAME,
     RAZIONE_RISPARMIATA,
+    RESPIRO_CALMO,
     SANGUE_FREDDO,
     SCUDO_ISTINTIVO,
     SONO_ANCORA_QUI,
@@ -186,6 +187,7 @@ def resolve_round(
         config,
         effective_comparison_values,
         active_effects_by_player,
+        animal_events,
     )
     hunger_excluded_player_ids = _find_finta_innocente_excluded_players(
         player_map,
@@ -648,6 +650,7 @@ def _apply_animal_comparison_effects(
     config: GameConfig,
     effective_comparison_values: dict[int, int],
     active_effects_by_player: Mapping[int, list[str]],
+    animal_events: list[AnimalEffectEvent],
 ) -> None:
     """Apply supported after-reveal animal effects to round comparison values."""
 
@@ -664,15 +667,59 @@ def _apply_animal_comparison_effects(
         )
         target = choose_comparison_value_target(valid_targets)
         if target is None:
+            animal_events.append(
+                _animal_event(
+                    player=source,
+                    card=card,
+                    effect_id=SCIMMIA_BUCCIA_DI_BANANA,
+                    effect_name="Buccia di Banana",
+                    timing="comparison",
+                    status="not_activated",
+                    reason="no_valid_target",
+                )
+            )
             continue
 
+        value_before = effective_comparison_values[target.player_id]
         modified_value = apply_comparison_value_modifier(
-            effective_comparison_values[target.player_id],
+            value_before,
             -1,
             target_active_effects=active_effects_by_player.get(target.player_id, []),
             caused_by_opponent=True,
         )
-        effective_comparison_values[target.player_id] = max(1, modified_value)
+        value_after = max(1, modified_value)
+        effective_comparison_values[target.player_id] = value_after
+        is_blocked = (
+            value_after == value_before
+            and RESPIRO_CALMO in active_effects_by_player.get(target.player_id, [])
+        )
+        is_minimum = value_after == value_before and value_before == 1
+        if is_blocked:
+            status = "blocked"
+            reason = "blocked_by_respiro_calmo"
+        elif is_minimum:
+            status = "applied"
+            reason = "minimum_1"
+        else:
+            status = "applied"
+            reason = "target_selected"
+
+        animal_events.append(
+            _animal_event(
+                player=source,
+                card=card,
+                effect_id=SCIMMIA_BUCCIA_DI_BANANA,
+                effect_name="Buccia di Banana",
+                timing="comparison",
+                status=status,
+                target_player_id=target.player_id,
+                value_before=value_before,
+                value_after=value_after,
+                amount=1,
+                actual_amount=value_before - value_after,
+                reason=reason,
+            )
+        )
 
 
 def _find_finta_innocente_excluded_players(

@@ -25,6 +25,7 @@ from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
     PANDA_RIPOSO_FORZATO,
+    SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
     SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
@@ -746,3 +747,83 @@ def test_animal_effect_events_csv_exports_finta_innocente_events(tmp_path):
     assert rows_by_status["not_activated"]["effect_id"] == SCIMMIA_FINTA_INNOCENTE
     assert rows_by_status["not_activated"]["timing"] == "hunger_assignment"
     assert rows_by_status["not_activated"]["reason"] == "no_other_printed_one"
+
+
+def test_animal_effect_events_csv_exports_buccia_di_banana_events(tmp_path):
+    events = [
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=2,
+            effect_id=SCIMMIA_BUCCIA_DI_BANANA,
+            effect_name="Buccia di Banana",
+            timing="comparison",
+            status="applied",
+            target_player_id=1,
+            value_before=4,
+            value_after=3,
+            amount=1,
+            actual_amount=1,
+            reason="target_selected",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=2,
+            effect_id=SCIMMIA_BUCCIA_DI_BANANA,
+            effect_name="Buccia di Banana",
+            timing="comparison",
+            status="blocked",
+            target_player_id=1,
+            value_before=4,
+            value_after=4,
+            amount=1,
+            actual_amount=0,
+            reason="blocked_by_respiro_calmo",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=2,
+            effect_id=SCIMMIA_BUCCIA_DI_BANANA,
+            effect_name="Buccia di Banana",
+            timing="comparison",
+            status="not_activated",
+            reason="no_valid_target",
+        ),
+    ]
+    simulation = SimulationResult(
+        players_count=3,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[RoundResult(round_number=1, animal_events=events)],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert len(rows) == 3
+    rows_by_status = {row["status"]: row for row in rows}
+    assert rows_by_status["applied"]["effect_id"] == SCIMMIA_BUCCIA_DI_BANANA
+    assert rows_by_status["applied"]["reason"] == "target_selected"
+    assert rows_by_status["applied"]["target_player_id"] == "1"
+    assert rows_by_status["applied"]["value_before"] == "4"
+    assert rows_by_status["applied"]["value_after"] == "3"
+    assert rows_by_status["blocked"]["effect_id"] == SCIMMIA_BUCCIA_DI_BANANA
+    assert rows_by_status["blocked"]["reason"] == "blocked_by_respiro_calmo"
+    assert rows_by_status["blocked"]["actual_amount"] == "0"
+    assert rows_by_status["not_activated"]["effect_id"] == SCIMMIA_BUCCIA_DI_BANANA
+    assert rows_by_status["not_activated"]["reason"] == "no_valid_target"

@@ -10,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
+    SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
 )
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
@@ -53,6 +54,26 @@ def test_buccia_di_banana_reduces_lowest_valid_target_comparison_by_one():
 
     assert result.lowest_value == 2
     assert result.critical_wound_players == [1, 2]
+    buccia_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+    ]
+    assert len(buccia_events) == 1
+    event = buccia_events[0]
+    assert event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+    assert event.effect_name == "Buccia di Banana"
+    assert event.timing == "comparison"
+    assert event.status == "applied"
+    assert event.reason == "target_selected"
+    assert event.player_id == 1
+    assert event.card_color == "GREEN"
+    assert event.card_value == 2
+    assert event.target_player_id == 2
+    assert event.value_before == 3
+    assert event.value_after == 2
+    assert event.amount == 1
+    assert event.actual_amount == 1
 
 
 def test_buccia_di_banana_does_not_reduce_below_one():
@@ -72,6 +93,20 @@ def test_buccia_di_banana_does_not_reduce_below_one():
 
     assert result.lowest_value == 1
     assert result.critical_wound_players == [2]
+    buccia_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+    ]
+    assert len(buccia_events) == 1
+    event = buccia_events[0]
+    assert event.status == "applied"
+    assert event.reason == "minimum_1"
+    assert event.target_player_id == 2
+    assert event.value_before == 1
+    assert event.value_after == 1
+    assert event.amount == 1
+    assert event.actual_amount == 0
 
 
 def test_buccia_di_banana_does_not_change_target_consumption():
@@ -141,6 +176,10 @@ def test_buccia_di_banana_is_inactive_when_animal_effects_are_disabled():
 
     assert result.lowest_value == 2
     assert result.critical_wound_players == [1]
+    assert not any(
+        event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+        for event in result.animal_events
+    )
 
 
 def test_buccia_di_banana_is_inactive_when_other_animals_play_scimmia_two():
@@ -163,6 +202,10 @@ def test_buccia_di_banana_is_inactive_when_other_animals_play_scimmia_two():
 
         assert result.lowest_value == 2
         assert result.critical_wound_players == [1]
+        assert not any(
+            event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+            for event in result.animal_events
+        )
 
 
 def test_buccia_di_banana_cannot_target_source_player():
@@ -275,6 +318,20 @@ def test_buccia_di_banana_respiro_calmo_blocks_reduction_without_retargeting():
     assert result.lowest_value == 2
     assert result.critical_wound_players == [1, 2, 3]
     assert players[1].critical_wounds == 1
+    buccia_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+    ]
+    assert len(buccia_events) == 1
+    event = buccia_events[0]
+    assert event.status == "blocked"
+    assert event.reason == "blocked_by_respiro_calmo"
+    assert event.target_player_id == 2
+    assert event.value_before == 2
+    assert event.value_after == 2
+    assert event.amount == 1
+    assert event.actual_amount == 0
 
 
 def test_buccia_di_banana_reduces_grande_letargo_target_from_three_to_two():
@@ -367,6 +424,17 @@ def test_buccia_di_banana_no_valid_targets_does_not_error():
 
     assert result.lowest_value == 2
     assert result.critical_wound_players == [1]
+    buccia_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == SCIMMIA_BUCCIA_DI_BANANA
+    ]
+    assert len(buccia_events) == 1
+    event = buccia_events[0]
+    assert event.timing == "comparison"
+    assert event.status == "not_activated"
+    assert event.reason == "no_valid_target"
+    assert event.target_player_id is None
 
 
 def test_finta_innocente_activates_with_another_printed_one_and_reassigns_affamato():
