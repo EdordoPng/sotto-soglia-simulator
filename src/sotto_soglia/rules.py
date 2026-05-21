@@ -9,6 +9,7 @@ from sotto_soglia.animal_effects import (
     CONIGLIO_GRANDE_BALZO,
     CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
+    PANDA_RESPIRO_LENTO,
     get_effect_id_for_card,
     is_own_animal_card_effect_active,
 )
@@ -92,7 +93,11 @@ def get_effective_consumption_value(
     if effect_id == CONIGLIO_PASSO_LEGGERO:
         return 1
 
-    return card.consumption_value
+    consumption = card.consumption_value
+    if effect_id == PANDA_RESPIRO_LENTO:
+        consumption -= 1
+
+    return max(1, consumption)
 
 
 def find_lowest_effective_value_players(
