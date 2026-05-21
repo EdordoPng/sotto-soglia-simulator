@@ -366,6 +366,215 @@ def test_buccia_di_banana_no_valid_targets_does_not_error():
     assert result.critical_wound_players == [1]
 
 
+def test_finta_innocente_activates_with_another_printed_one_and_reassigns_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.RED, 1),
+            3: Card(Color.YELLOW, 4),
+        },
+        _animal_config(),
+    )
+
+    assert result.lowest_value == 2
+    assert result.critical_wound_players == [2]
+    assert players[0].critical_wounds == 0
+    assert players[1].critical_wounds == 1
+
+
+def test_finta_innocente_counts_printed_value_not_effective_comparison():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.RED, 1),
+            3: Card(Color.YELLOW, 4),
+        },
+        _animal_config(),
+    )
+
+    assert get_effective_comparison_value(
+        players[1],
+        Card(Color.RED, 1),
+        _animal_config(),
+    ) == 2
+    assert result.lowest_value == 2
+    assert result.critical_wound_players == [2]
+
+
+def test_finta_innocente_reassigns_affamato_to_lowest_remaining_player():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+        PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.BLUE, 2),
+            3: Card(Color.RED, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.lowest_value == 1
+    assert result.critical_wound_players == [3]
+    assert players[0].critical_wounds == 0
+
+
+def test_finta_innocente_ties_between_other_players_after_exclusion():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.RED, 1),
+            3: Card(Color.RED, 2),
+        },
+        _animal_config(),
+    )
+
+    assert result.lowest_value == 2
+    assert result.critical_wound_players == [2, 3]
+    assert players[0].critical_wounds == 0
+
+
+def test_finta_innocente_does_not_activate_without_other_printed_one():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.BLUE, 2),
+        },
+        _animal_config(),
+    )
+
+    assert result.lowest_value == 1
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[1] == 0
+    assert players[0].lives == 12
+
+
+def test_finta_innocente_is_inactive_when_animal_effects_are_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.RED, 1),
+        },
+        GameConfig(color_effects_enabled=False),
+    )
+
+    assert result.lowest_value == 1
+    assert result.critical_wound_players == [1, 2]
+
+
+def test_finta_innocente_is_inactive_when_other_animals_play_scimmia_one():
+    for color in (Color.BLUE, Color.RED, Color.YELLOW):
+        players = [
+            PlayerState(player_id=1, color=color, lives=12),
+            PlayerState(player_id=2, color=Color.BLUE, lives=12),
+        ]
+
+        result = resolve_round(
+            players,
+            {
+                1: Card(Color.GREEN, 1),
+                2: Card(Color.BLUE, 1),
+            },
+            _animal_config(),
+        )
+
+        assert result.lowest_value == 1
+        assert result.critical_wound_players == [1, 2]
+
+
+def test_finta_innocente_active_scimmia_consumes_one_and_is_not_immune():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+        PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.RED, 1),
+            3: Card(Color.YELLOW, 4),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[1] == 1
+    assert players[0].lives == 11
+
+
+def test_finta_innocente_active_scimmia_can_receive_extra_consumption():
+    players = [
+        PlayerState(player_id=1, color=Color.GREEN, lives=12),
+        PlayerState(player_id=2, color=Color.GREEN, lives=12),
+        PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 1),
+            2: Card(Color.GREEN, 5),
+            3: Card(Color.RED, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [3]
+    assert result.base_damage_by_player[1] == 1
+    assert result.extra_damage_by_player[1] == 1
+    assert players[0].lives == 10
+
+
+def test_finta_innocente_keeps_scimmia_one_static_values():
+    scimmia = PlayerState(player_id=1, color=Color.GREEN, lives=12)
+    card = Card(Color.GREEN, 1)
+
+    assert card.value == 1
+    assert card.comparison_value == 1
+    assert card.consumption_value == 1
+    assert get_effective_comparison_value(scimmia, card, _animal_config()) == 1
+    assert get_effective_consumption_value(scimmia, card, _animal_config()) == 1
+
+
 def test_banana_rubata_extra_consumption_and_conditional_recovery():
     players = [
         PlayerState(player_id=1, color=Color.GREEN, lives=7),
@@ -767,6 +976,37 @@ def test_runtime_standard_result_does_not_change_without_animal_effect_flag_for_
             PlayerState(player_id=1, color=Color.GREEN, lives=12),
             PlayerState(player_id=2, color=Color.BLUE, lives=12),
             PlayerState(player_id=3, color=Color.RED, lives=12),
+        ],
+        selected_cards,
+        replace(get_v05_config_for_players(3), critical_card_effects_enabled=False),
+    )
+
+    assert v05_without_animals.critical_wound_players == baseline.critical_wound_players
+    assert v05_without_animals.base_damage_by_player == baseline.base_damage_by_player
+    assert v05_without_animals.lowest_value == baseline.lowest_value
+
+
+def test_runtime_standard_result_does_not_change_without_animal_effect_flag_for_scimmia_one():
+    selected_cards = {
+        1: Card(Color.GREEN, 1),
+        2: Card(Color.RED, 1),
+        3: Card(Color.YELLOW, 4),
+    }
+
+    baseline = resolve_round(
+        [
+            PlayerState(player_id=1, color=Color.GREEN, lives=12),
+            PlayerState(player_id=2, color=Color.RED, lives=12),
+            PlayerState(player_id=3, color=Color.YELLOW, lives=12),
+        ],
+        selected_cards,
+        GameConfig(color_effects_enabled=False),
+    )
+    v05_without_animals = resolve_round(
+        [
+            PlayerState(player_id=1, color=Color.GREEN, lives=12),
+            PlayerState(player_id=2, color=Color.RED, lives=12),
+            PlayerState(player_id=3, color=Color.YELLOW, lives=12),
         ],
         selected_cards,
         replace(get_v05_config_for_players(3), critical_card_effects_enabled=False),

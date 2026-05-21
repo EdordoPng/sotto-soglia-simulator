@@ -9,6 +9,7 @@ from sotto_soglia.animal_effects import (
     PANDA_RIPOSO_FORZATO,
     SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
+    SCIMMIA_FINTA_INNOCENTE,
 )
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
@@ -169,13 +170,20 @@ def resolve_round(
         effective_comparison_values,
         active_effects_by_player,
     )
-    lowest_value = min(
-        effective_comparison_values.values(),
-        default=None,
+    hunger_excluded_player_ids = _find_finta_innocente_excluded_players(
+        player_map,
+        selected_cards,
+        config,
     )
+    eligible_comparison_values = {
+        player_id: effective_value
+        for player_id, effective_value in effective_comparison_values.items()
+        if player_id not in hunger_excluded_player_ids
+    }
+    lowest_value = min(eligible_comparison_values.values(), default=None)
     critical_wound_player_ids = {
         player_id
-        for player_id, effective_value in effective_comparison_values.items()
+        for player_id, effective_value in eligible_comparison_values.items()
         if effective_value == lowest_value
     }
     if lowest_value is None:
@@ -506,6 +514,30 @@ def _apply_animal_comparison_effects(
             caused_by_opponent=True,
         )
         effective_comparison_values[target.player_id] = max(1, modified_value)
+
+
+def _find_finta_innocente_excluded_players(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+) -> set[int]:
+    """Return players excluded from hunger by supported animal-card effects."""
+
+    excluded_player_ids: set[int] = set()
+    for player_id, card in selected_cards.items():
+        player = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(player, card, config)
+        if effect_id != SCIMMIA_FINTA_INNOCENTE:
+            continue
+
+        has_other_printed_one = any(
+            other_player_id != player_id and other_card.value == 1
+            for other_player_id, other_card in selected_cards.items()
+        )
+        if has_other_printed_one:
+            excluded_player_ids.add(player_id)
+
+    return excluded_player_ids
 
 
 def _schedule_animal_life_recoveries(
