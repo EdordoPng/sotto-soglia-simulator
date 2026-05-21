@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from collections.abc import Iterable, Mapping
 from random import Random
 
+from sotto_soglia.animal_effects import PANDA_RIPOSO_FORZATO
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import (
     BENDAGGIO_EMERGENZA,
@@ -30,6 +31,7 @@ from sotto_soglia.models import PlayerState
 from sotto_soglia.rules import (
     apply_life_loss,
     find_lowest_effective_value_players,
+    get_active_own_animal_effect_id,
     get_effective_comparison_value,
     get_effective_consumption_value,
     resolve_eliminations,
@@ -132,6 +134,7 @@ def resolve_round(
     critical_events = list(preliminary_critical_events or [])
     critical_life_delta_by_player = {player_id: 0 for player_id in player_map}
     pending_life_recoveries = {player_id: 0 for player_id in player_map}
+    pending_animal_life_recoveries = {player_id: 0 for player_id in player_map}
     pending_life_recovery_events: dict[int, list[CriticalCardEvent]] = {
         player_id: [] for player_id in player_map
     }
@@ -180,6 +183,13 @@ def resolve_round(
                 rng=rng,
                 game_state=game_state,
             )
+
+    _schedule_animal_life_recoveries(
+        player_map=player_map,
+        selected_cards=selected_cards,
+        config=config,
+        pending_life_recoveries=pending_animal_life_recoveries,
+    )
 
     base_damage_by_player = {
         player_id: _calculate_base_damage_with_critical_effects(
@@ -269,6 +279,11 @@ def resolve_round(
         config=config,
         critical_life_delta_by_player=critical_life_delta_by_player,
         pending_life_recovery_events=pending_life_recovery_events,
+    )
+    apply_pending_animal_life_recoveries(
+        player_map=player_map,
+        pending_life_recoveries=pending_animal_life_recoveries,
+        config=config,
     )
 
     for player_id, prevented_damage in prevented_damage_by_player.items():
@@ -422,6 +437,21 @@ def _draw_and_apply_critical_card(
         pending_life_recovery_events[player_id].append(event)
 
 
+def _schedule_animal_life_recoveries(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+    pending_life_recoveries: dict[int, int],
+) -> None:
+    """Schedule same-round recovery from supported animal-card effects."""
+
+    for player_id, card in selected_cards.items():
+        player = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(player, card, config)
+        if effect_id == PANDA_RIPOSO_FORZATO:
+            schedule_life_recovery(pending_life_recoveries, player_id, 1)
+
+
 def schedule_life_recovery(
     pending_life_recoveries: dict[int, int],
     player_id: int,
@@ -472,6 +502,26 @@ def apply_pending_life_recoveries(
             event.player_lives_after = player.lives
             event.player_critical_wounds_after = player.critical_wounds
             remaining_recovered -= event_delta
+
+    return applied_recoveries
+
+
+def apply_pending_animal_life_recoveries(
+    player_map: Mapping[int, PlayerState],
+    pending_life_recoveries: Mapping[int, int],
+    config: GameConfig,
+) -> dict[int, int]:
+    """Apply scheduled animal-card recovery in the recovery phase."""
+
+    applied_recoveries: dict[int, int] = {}
+    for player_id, amount in pending_life_recoveries.items():
+        if amount <= 0:
+            continue
+
+        player = player_map[player_id]
+        before = player.lives
+        player.lives = min(config.initial_lives, player.lives + amount)
+        applied_recoveries[player_id] = player.lives - before
 
     return applied_recoveries
 

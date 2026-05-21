@@ -255,7 +255,7 @@ def test_round_ties_coniglio_one_when_animal_effects_are_disabled():
 
 def test_hunger_effects_still_resolve_after_scatto_improvviso_assignment():
     players = [
-        PlayerState(player_id=1, color=Color.BLUE, lives=7),
+        PlayerState(player_id=1, color=Color.GREEN, lives=7),
         PlayerState(player_id=2, color=Color.RED, lives=12),
     ]
     config = _animal_config(
