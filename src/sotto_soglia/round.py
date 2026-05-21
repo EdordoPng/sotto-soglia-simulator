@@ -10,6 +10,7 @@ from sotto_soglia.animal_effects import (
     SCIMMIA_BANANA_RUBATA,
     SCIMMIA_BUCCIA_DI_BANANA,
     SCIMMIA_FINTA_INNOCENTE,
+    SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
     SCOIATTOLO_PICCOLA_RISERVA,
 )
@@ -228,6 +229,7 @@ def resolve_round(
         player_map=player_map,
         selected_cards=selected_cards,
         config=config,
+        critical_wound_player_ids=critical_wound_player_ids,
     )
     _schedule_animal_extra_consumptions(
         player_map=player_map,
@@ -568,6 +570,7 @@ def _schedule_next_round_animal_effects(
     player_map: Mapping[int, PlayerState],
     selected_cards: Mapping[int, Card],
     config: GameConfig,
+    critical_wound_player_ids: set[int],
 ) -> None:
     """Register supported next-round animal-card effects."""
 
@@ -578,6 +581,11 @@ def _schedule_next_round_animal_effects(
             player.active_animal_effects.append(PANDA_GRANDE_LETARGO)
         elif effect_id == SCOIATTOLO_GHIANDA_NASCOSTA:
             player.active_animal_effects.append(SCOIATTOLO_GHIANDA_NASCOSTA)
+        elif (
+            effect_id == SCOIATTOLO_DISPENSA_ORDINATA
+            and player_id not in critical_wound_player_ids
+        ):
+            player.active_animal_effects.append(SCOIATTOLO_DISPENSA_ORDINATA)
 
 
 def _schedule_animal_extra_consumptions(

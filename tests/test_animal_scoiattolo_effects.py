@@ -10,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
 
 from sotto_soglia.animal_effects import (
     PANDA_GRANDE_LETARGO,
+    SCOIATTOLO_DISPENSA_ORDINATA,
     SCOIATTOLO_GHIANDA_NASCOSTA,
 )
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
@@ -143,7 +144,7 @@ def test_ghianda_nascosta_is_consumed_after_next_round():
     resolve_round(
         players,
         {
-            1: Card(Color.YELLOW, 4),
+            1: Card(Color.YELLOW, 2),
             2: Card(Color.BLUE, 1),
         },
         _animal_config(),
@@ -184,7 +185,7 @@ def test_ghianda_nascosta_does_not_apply_twice():
     resolve_round(
         players,
         {
-            1: Card(Color.YELLOW, 4),
+            1: Card(Color.YELLOW, 2),
             2: Card(Color.BLUE, 1),
         },
         _animal_config(),
@@ -594,7 +595,46 @@ def test_existing_coniglio_effects_still_work():
     ) == 5
 
 
-def test_dispensa_ordinata_is_not_implemented_yet():
+def test_dispensa_ordinata_registers_next_round_when_not_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=12),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 4),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [2]
+    assert players[0].active_animal_effects == [SCOIATTOLO_DISPENSA_ORDINATA]
+
+
+def test_dispensa_ordinata_does_not_register_when_scoiattolo_receives_affamato():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=12),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 4),
+            2: Card(Color.BLUE, 4),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [1, 2]
+    assert result.base_damage_by_player[1] == 0
+    assert players[0].active_animal_effects == []
+
+
+def test_dispensa_ordinata_does_not_change_current_round_hand():
     players = [
         PlayerState(player_id=1, color=Color.YELLOW, lives=12),
         PlayerState(player_id=2, color=Color.BLUE, lives=12),
@@ -604,20 +644,258 @@ def test_dispensa_ordinata_is_not_implemented_yet():
         players,
         {
             1: Card(Color.YELLOW, 4),
-            2: Card(Color.BLUE, 2),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+    hand_sizes, events = _hand_sizes_from_critical_effects(
+        players,
+        _animal_config(),
+        {},
+        game_id=1,
+        round_number=1,
+        active_animal_effects_by_player={},
+    )
+
+    assert players[0].active_animal_effects == [SCOIATTOLO_DISPENSA_ORDINATA]
+    assert hand_sizes == {}
+    assert events == []
+
+
+def test_dispensa_ordinata_deals_four_cards_next_round():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.YELLOW,
+            lives=12,
+            active_animal_effects=[SCOIATTOLO_DISPENSA_ORDINATA],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    hand_sizes, events = _hand_sizes_from_critical_effects(
+        players,
+        _animal_config(),
+        {},
+        game_id=1,
+        round_number=2,
+        active_animal_effects_by_player={1: [SCOIATTOLO_DISPENSA_ORDINATA]},
+    )
+    hands = _deal_hands(players, Random(1), _animal_config(), hand_sizes)
+
+    assert hand_sizes == {1: 4}
+    assert len(hands[1]) == 4
+    assert len(hands[2]) == 3
+    assert events == []
+
+
+def test_dispensa_ordinata_is_consumed_after_next_round():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.YELLOW,
+            lives=12,
+            active_animal_effects=[SCOIATTOLO_DISPENSA_ORDINATA],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 2),
+            2: Card(Color.BLUE, 1),
         },
         _animal_config(),
     )
 
     assert players[0].active_animal_effects == []
+
+
+def test_dispensa_ordinata_does_not_apply_twice():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.YELLOW,
+            lives=12,
+            active_animal_effects=[SCOIATTOLO_DISPENSA_ORDINATA],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    first_hand_sizes, _ = _hand_sizes_from_critical_effects(
+        players,
+        _animal_config(),
+        {},
+        game_id=1,
+        round_number=2,
+        active_animal_effects_by_player={1: [SCOIATTOLO_DISPENSA_ORDINATA]},
+    )
+    resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 2),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+    second_hand_sizes, _ = _hand_sizes_from_critical_effects(
+        players,
+        _animal_config(),
+        {},
+        game_id=1,
+        round_number=3,
+        active_animal_effects_by_player={},
+    )
+
+    assert first_hand_sizes == {1: 4}
+    assert second_hand_sizes == {}
+
+
+def test_dispensa_ordinata_keeps_values_consumption_and_affamato_assignment():
+    scoiattolo = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
+    card = Card(Color.YELLOW, 4)
+
+    result = resolve_round(
+        [scoiattolo, PlayerState(player_id=2, color=Color.BLUE, lives=12)],
+        {
+            1: card,
+            2: Card(Color.BLUE, 5),
+        },
+        _animal_config(),
+    )
+
+    assert card.value == 4
+    assert card.comparison_value == 4
+    assert card.consumption_value == 4
     assert (
         get_effective_comparison_value(
-            players[0],
-            Card(Color.YELLOW, 4),
+            scoiattolo,
+            card,
             _animal_config(),
         )
         == 4
     )
+    assert get_effective_consumption_value(scoiattolo, card, _animal_config()) == 4
+    assert result.lowest_value == 4
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[1] == 0
+    assert scoiattolo.active_animal_effects == []
+
+
+def test_dispensa_ordinata_is_inactive_when_other_animals_play_scoiattolo_four():
+    for color in (Color.BLUE, Color.RED, Color.GREEN):
+        players = [
+            PlayerState(player_id=1, color=color, lives=12),
+            PlayerState(player_id=2, color=Color.BLUE, lives=12),
+        ]
+
+        result = resolve_round(
+            players,
+            {
+                1: Card(Color.YELLOW, 4),
+                2: Card(Color.BLUE, 1),
+            },
+            _animal_config(),
+        )
+
+        assert result.base_damage_by_player[1] == 4
+        assert players[0].active_animal_effects == []
+
+
+def test_dispensa_ordinata_is_inactive_when_animal_effects_are_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.YELLOW, lives=12),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.YELLOW, 4),
+            2: Card(Color.BLUE, 1),
+        },
+        GameConfig(color_effects_enabled=False),
+    )
+
+    assert result.base_damage_by_player[1] == 4
+    assert players[0].active_animal_effects == []
+
+
+def test_dispensa_ordinata_and_ghianda_nascosta_clamp_to_four_cards():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.YELLOW,
+            lives=12,
+            active_animal_effects=[
+                SCOIATTOLO_DISPENSA_ORDINATA,
+                SCOIATTOLO_GHIANDA_NASCOSTA,
+            ],
+        )
+    ]
+
+    hand_sizes, events = _hand_sizes_from_critical_effects(
+        players,
+        _animal_config(),
+        {},
+        game_id=1,
+        round_number=2,
+        active_animal_effects_by_player={
+            1: [SCOIATTOLO_DISPENSA_ORDINATA, SCOIATTOLO_GHIANDA_NASCOSTA]
+        },
+    )
+
+    assert hand_sizes == {1: 4}
+    assert events == []
+
+
+def test_dispensa_ordinata_and_fiuto_da_dispensa_clamp_to_four_cards():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.YELLOW,
+            lives=12,
+            active_critical_effects=[FIUTO_DA_DISPENSA],
+            active_animal_effects=[SCOIATTOLO_DISPENSA_ORDINATA],
+        )
+    ]
+
+    hand_sizes, events = _hand_sizes_from_critical_effects(
+        players,
+        _animal_hunger_config(),
+        {1: [FIUTO_DA_DISPENSA]},
+        game_id=1,
+        round_number=2,
+        active_animal_effects_by_player={1: [SCOIATTOLO_DISPENSA_ORDINATA]},
+    )
+
+    assert hand_sizes == {1: 4}
+    assert [event.critical_card_id for event in events] == [FIUTO_DA_DISPENSA]
+
+
+def test_dispensa_ordinata_and_pancia_brontolante_cancel_to_three_cards():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.YELLOW,
+            lives=12,
+            active_critical_effects=[PANCIA_BRONTOLANTE],
+            active_animal_effects=[SCOIATTOLO_DISPENSA_ORDINATA],
+        )
+    ]
+
+    hand_sizes, events = _hand_sizes_from_critical_effects(
+        players,
+        _animal_hunger_config(),
+        {1: [PANCIA_BRONTOLANTE]},
+        game_id=1,
+        round_number=2,
+        active_animal_effects_by_player={1: [SCOIATTOLO_DISPENSA_ORDINATA]},
+    )
+
+    assert hand_sizes == {1: 3}
+    assert [event.critical_card_id for event in events] == [PANCIA_BRONTOLANTE]
 
 
 def test_standard_runtime_does_not_change_when_animal_effects_are_disabled():
@@ -626,7 +904,10 @@ def test_standard_runtime_does_not_change_when_animal_effects_are_disabled():
             player_id=1,
             color=Color.YELLOW,
             lives=12,
-            active_animal_effects=[SCOIATTOLO_GHIANDA_NASCOSTA],
+            active_animal_effects=[
+                SCOIATTOLO_GHIANDA_NASCOSTA,
+                SCOIATTOLO_DISPENSA_ORDINATA,
+            ],
         )
     ]
 
@@ -636,7 +917,9 @@ def test_standard_runtime_does_not_change_when_animal_effects_are_disabled():
         {},
         game_id=1,
         round_number=2,
-        active_animal_effects_by_player={1: [SCOIATTOLO_GHIANDA_NASCOSTA]},
+        active_animal_effects_by_player={
+            1: [SCOIATTOLO_GHIANDA_NASCOSTA, SCOIATTOLO_DISPENSA_ORDINATA]
+        },
     )
 
     assert hand_sizes == {}

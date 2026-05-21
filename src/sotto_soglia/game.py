@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 from random import Random
 
-from sotto_soglia.animal_effects import SCOIATTOLO_GHIANDA_NASCOSTA
+from sotto_soglia.animal_effects import (
+    SCOIATTOLO_DISPENSA_ORDINATA,
+    SCOIATTOLO_GHIANDA_NASCOSTA,
+)
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     FIUTO_DA_DISPENSA,
@@ -261,13 +264,20 @@ def _hand_sizes_from_critical_effects(
             for effect_id in active_effects
             if effect_id in (FIUTO_DA_DISPENSA, PANCIA_BRONTOLANTE)
         ]
-        has_ghianda_nascosta = SCOIATTOLO_GHIANDA_NASCOSTA in active_animal_effects
-        if not hand_effects and not has_ghianda_nascosta:
+        active_animal_hand_effects = [
+            effect_id
+            for effect_id in active_animal_effects
+            if effect_id in (
+                SCOIATTOLO_GHIANDA_NASCOSTA,
+                SCOIATTOLO_DISPENSA_ORDINATA,
+            )
+        ]
+        if not hand_effects and not active_animal_hand_effects:
             continue
 
         hand_size_delta = active_effects.count(FIUTO_DA_DISPENSA)
         hand_size_delta -= active_effects.count(PANCIA_BRONTOLANTE)
-        hand_size_delta += active_animal_effects.count(SCOIATTOLO_GHIANDA_NASCOSTA)
+        hand_size_delta += len(active_animal_hand_effects)
         hand_sizes[player.player_id] = min(
             4,
             max(2, config.cards_per_player + hand_size_delta),
