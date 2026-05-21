@@ -449,6 +449,28 @@ def test_v05_balanced_penalizes_affamato_risk_near_limit():
     assert selected == safer
 
 
+def test_v05_balanced_is_not_too_passive_on_affamato_near_limit():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(
+        player_id=1,
+        color=Color.BLUE,
+        lives=8,
+        critical_wounds=config.critical_wounds_limit - 1,
+    )
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    low_consumption_risky = Card(Color.RED, 1)
+    sustainable_safer = Card(Color.GREEN, 4)
+
+    selected = V05BalancedStrategy().choose_card(
+        player,
+        [low_consumption_risky, sustainable_safer],
+        _v05_game_state(player, opponent, config=config),
+        Random(1),
+    )
+
+    assert selected == sustainable_safer
+
+
 def test_v05_balanced_tie_break_is_deterministic():
     player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
     opponent = PlayerState(player_id=2, color=Color.RED, lives=12)

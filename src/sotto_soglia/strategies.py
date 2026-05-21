@@ -413,8 +413,8 @@ class V05BalancedStrategy(BaseStrategy):
 
         def score(card_data: tuple[Card, int, int]) -> tuple[float, int, int, int, int]:
             card, comparison, consumption = card_data
-            points = min(comparison, 4) * 2.0
-            points -= consumption * 3.5
+            points = min(comparison, 4) * 2.4
+            points -= consumption * 3.0
 
             low_comparison_penalty = max(0, 3 - comparison) * 1.5
             if comparison == lowest_hand_comparison:
@@ -430,11 +430,11 @@ class V05BalancedStrategy(BaseStrategy):
             else:
                 remaining_lives = player.lives - consumption
                 if remaining_lives <= 1:
-                    points -= 30.0
+                    points -= 24.0
                 elif remaining_lives <= 2:
-                    points -= 18.0
+                    points -= 12.0
                 elif remaining_lives <= 3:
-                    points -= 8.0
+                    points -= 4.0
 
             return (
                 points,
