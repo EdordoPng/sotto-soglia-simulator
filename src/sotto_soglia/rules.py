@@ -5,6 +5,11 @@ The full game rules will be implemented incrementally in later phases.
 
 from collections.abc import Iterable, Mapping
 
+from sotto_soglia.animal_effects import (
+    CONIGLIO_SCATTO_IMPROVVISO,
+    get_effect_id_for_card,
+    is_own_animal_card_effect_active,
+)
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import RESPIRO_CALMO
 from sotto_soglia.models import Card, EliminationReason, PlayerState
@@ -39,6 +44,52 @@ def find_lowest_value_cards(selected_cards: Mapping[int, Card]) -> set[int]:
     """Backward-compatible alias for lowest-value player ids."""
 
     return find_lowest_value_players(selected_cards)
+
+
+def get_effective_comparison_value(
+    player: PlayerState,
+    card: Card,
+    config: GameConfig,
+) -> int:
+    """Return the comparison value for a card as played by one player."""
+
+    if not config.animal_card_effects_enabled:
+        return card.comparison_value
+
+    if not is_own_animal_card_effect_active(player, card):
+        return card.comparison_value
+
+    if get_effect_id_for_card(card) == CONIGLIO_SCATTO_IMPROVVISO:
+        return 2
+
+    return card.comparison_value
+
+
+def find_lowest_effective_value_players(
+    players: PlayerCollection,
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+) -> set[int]:
+    """Return player ids with the lowest contextual comparison value."""
+
+    if not selected_cards:
+        return set()
+
+    player_map = _players_by_id(players)
+    effective_values = {
+        player_id: get_effective_comparison_value(
+            player_map[player_id],
+            card,
+            config,
+        )
+        for player_id, card in selected_cards.items()
+    }
+    lowest_value = min(effective_values.values())
+    return {
+        player_id
+        for player_id, effective_value in effective_values.items()
+        if effective_value == lowest_value
+    }
 
 
 def valid_comparison_value_targets(

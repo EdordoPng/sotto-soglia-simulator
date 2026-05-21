@@ -29,7 +29,8 @@ from sotto_soglia.models import Card
 from sotto_soglia.models import PlayerState
 from sotto_soglia.rules import (
     apply_life_loss,
-    find_lowest_value_players,
+    find_lowest_effective_value_players,
+    get_effective_comparison_value,
     resolve_eliminations,
 )
 from sotto_soglia.strategies import BaseStrategy, choose_fallback_critical_effect_target
@@ -135,9 +136,21 @@ def resolve_round(
     }
     pending_extra_consumptions: list[PendingExtraConsumption] = []
 
-    critical_wound_player_ids = find_lowest_value_players(selected_cards)
+    effective_comparison_values = {
+        player_id: get_effective_comparison_value(
+            player_map[player_id],
+            card,
+            config,
+        )
+        for player_id, card in selected_cards.items()
+    }
+    critical_wound_player_ids = find_lowest_effective_value_players(
+        player_map,
+        selected_cards,
+        config,
+    )
     lowest_value = min(
-        (card.comparison_value for card in selected_cards.values()),
+        effective_comparison_values.values(),
         default=None,
     )
 

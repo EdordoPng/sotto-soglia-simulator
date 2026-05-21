@@ -1,0 +1,149 @@
+from dataclasses import replace
+from pathlib import Path
+import sys
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
+from sotto_soglia.critical import BRICIOLA_NASCOSTA, V05_HUNGER_DECK_PROFILE_ID
+from sotto_soglia.models import Card, Color, PlayerState
+from sotto_soglia.round import resolve_round
+from sotto_soglia.rules import get_effective_comparison_value
+
+
+def _animal_config(**overrides) -> GameConfig:
+    return GameConfig(
+        initial_lives=12,
+        critical_wounds_limit=5,
+        color_effects_enabled=False,
+        animal_card_effects_enabled=True,
+        **overrides,
+    )
+
+
+def test_game_config_disables_animal_card_effects_by_default():
+    assert GameConfig().animal_card_effects_enabled is False
+
+
+def test_v05_presets_do_not_enable_animal_card_effects_yet():
+    assert get_v05_config_for_players(2).animal_card_effects_enabled is False
+    assert get_v05_config_for_players(3).animal_card_effects_enabled is False
+    assert get_v05_config_for_players(4).animal_card_effects_enabled is False
+
+
+def test_scatto_improvviso_sets_own_coniglio_one_effective_comparison_to_two():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    card = Card(Color.RED, 1)
+
+    assert card.value == 1
+    assert card.consumption_value == 1
+    assert card.comparison_value == 1
+    assert get_effective_comparison_value(player, card, _animal_config()) == 2
+
+
+def test_scatto_improvviso_is_inactive_when_animal_effects_are_disabled():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    card = Card(Color.RED, 1)
+
+    assert get_effective_comparison_value(player, card, GameConfig()) == 1
+
+
+def test_scatto_improvviso_is_inactive_when_other_animal_plays_coniglio_one():
+    card = Card(Color.RED, 1)
+
+    for color in (Color.BLUE, Color.GREEN, Color.YELLOW):
+        player = PlayerState(player_id=1, color=color, lives=12)
+
+        assert get_effective_comparison_value(player, card, _animal_config()) == 1
+
+
+def test_round_affamato_uses_scatto_improvviso_effective_comparison_value():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 1),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.lowest_value == 1
+    assert result.critical_wound_players == [1]
+    assert players[0].critical_wounds == 1
+    assert players[1].critical_wounds == 0
+
+
+def test_round_ties_coniglio_one_when_animal_effects_are_disabled():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 1),
+    }
+
+    result = resolve_round(players, selected_cards, GameConfig(color_effects_enabled=False))
+
+    assert result.lowest_value == 1
+    assert result.critical_wound_players == [1, 2]
+
+
+def test_hunger_effects_still_resolve_after_scatto_improvviso_assignment():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=7),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    config = _animal_config(
+        critical_card_effects_enabled=True,
+        critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
+    )
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 1),
+            2: Card(Color.RED, 1),
+        },
+        config,
+        critical_deck=[BRICIOLA_NASCOSTA],
+    )
+
+    assert result.critical_wound_players == [1]
+    assert players[0].critical_cards_drawn == [BRICIOLA_NASCOSTA]
+    assert players[0].lives == 8
+    assert players[1].critical_cards_drawn == []
+
+
+def test_runtime_standard_result_does_not_change_without_animal_effect_flag():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 1),
+        2: Card(Color.RED, 1),
+    }
+
+    baseline = resolve_round(
+        [
+            PlayerState(player_id=1, color=Color.BLUE, lives=12),
+            PlayerState(player_id=2, color=Color.RED, lives=12),
+        ],
+        selected_cards,
+        GameConfig(color_effects_enabled=False),
+    )
+    v05_without_animals = resolve_round(
+        players,
+        selected_cards,
+        replace(get_v05_config_for_players(2), critical_card_effects_enabled=False),
+    )
+
+    assert v05_without_animals.critical_wound_players == baseline.critical_wound_players
+    assert v05_without_animals.lowest_value == baseline.lowest_value
