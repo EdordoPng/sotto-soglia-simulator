@@ -33,6 +33,7 @@ from sotto_soglia.animal_effects import (
     SCOIATTOLO_PICCOLA_RISERVA,
 )
 from sotto_soglia.game import GameResult
+from sotto_soglia.models import Color, PlayerState
 from sotto_soglia.round import RoundResult
 from sotto_soglia.simulation import SimulationResult, SimulationRunner
 
@@ -47,6 +48,7 @@ ANIMAL_EFFECT_EVENT_FIELDS = [
     "player_id",
     "animal",
     "card_color",
+    "card_display_color",
     "card_value",
     "effect_id",
     "effect_name",
@@ -82,7 +84,12 @@ def test_aggregate_stats_json_is_valid(tmp_path):
 
     assert data["games_count"] == 5
     assert "average_rounds" in data
+    assert "wins_by_color" in data
     assert "win_rate_by_color" in data
+    assert "wins_by_animal" in data
+    assert "win_rate_by_animal" in data
+    assert "wins_by_display_color" in data
+    assert "win_rate_by_display_color" in data
 
 
 def test_simulation_config_json_is_valid(tmp_path):
@@ -311,9 +318,57 @@ def test_games_summary_csv_is_valid(tmp_path):
         "winner_ids",
         "is_draw",
         "strategy_names",
+        "winner_colors",
+        "winner_animals",
+        "winner_display_colors",
         "winner_strategies",
     ]:
         assert column in rows[0]
+
+
+def test_games_summary_csv_exports_winner_animals_and_display_colors(tmp_path):
+    simulation = SimulationResult(
+        players_count=4,
+        games_count=4,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                winner_ids=[1],
+                final_players=[PlayerState(player_id=1, color=Color.BLUE, lives=5)],
+            ),
+            GameResult(
+                game_id=2,
+                winner_ids=[1],
+                final_players=[PlayerState(player_id=1, color=Color.RED, lives=5)],
+            ),
+            GameResult(
+                game_id=3,
+                winner_ids=[1],
+                final_players=[PlayerState(player_id=1, color=Color.GREEN, lives=5)],
+            ),
+            GameResult(
+                game_id=4,
+                winner_ids=[1],
+                final_players=[PlayerState(player_id=1, color=Color.YELLOW, lives=5)],
+            ),
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["games_summary"].open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    rows_by_color = {row["winner_colors"]: row for row in rows}
+    assert rows_by_color["BLUE"]["winner_animals"] == "Panda"
+    assert rows_by_color["BLUE"]["winner_display_colors"] == "green"
+    assert rows_by_color["RED"]["winner_animals"] == "Coniglio"
+    assert rows_by_color["RED"]["winner_display_colors"] == "orange"
+    assert rows_by_color["GREEN"]["winner_animals"] == "Scimmia"
+    assert rows_by_color["GREEN"]["winner_display_colors"] == "yellow"
+    assert rows_by_color["YELLOW"]["winner_animals"] == "Scoiattolo"
+    assert rows_by_color["YELLOW"]["winner_display_colors"] == "brown"
 
 
 def test_rounds_summary_csv_is_valid(tmp_path):
@@ -407,6 +462,7 @@ def test_animal_effect_events_csv_exports_scatto_improvviso(tmp_path):
     assert row["effect_name"] == "Scatto Improvviso"
     assert row["player_id"] == "2"
     assert row["card_color"] == "RED"
+    assert row["card_display_color"] == "orange"
     assert row["card_value"] == "1"
     assert row["timing"] == "comparison"
     assert row["status"] == "applied"
@@ -488,6 +544,7 @@ def test_animal_effect_events_csv_exports_multiple_events_and_games(tmp_path):
     assert len(rows) == 3
     assert [row["game_index"] for row in rows] == ["1", "1", "2"]
     assert [row["round_number"] for row in rows] == ["1", "1", "2"]
+    assert [row["card_display_color"] for row in rows] == ["green", "orange", "green"]
     riposo_rows = [
         row
         for row in rows
@@ -628,6 +685,78 @@ def test_animal_effect_events_csv_exports_k2_and_k6_effects(tmp_path):
         SCOIATTOLO_GHIANDA_NASCOSTA,
         SCOIATTOLO_PICCOLA_RISERVA,
     }
+
+
+def test_animal_effect_events_csv_exports_card_display_color_for_technical_colors(
+    tmp_path,
+):
+    events = [
+        AnimalEffectEvent(
+            player_id=1,
+            animal="Panda",
+            card_color="BLUE",
+            card_value=1,
+            effect_id=PANDA_RIPOSO_FORZATO,
+            effect_name="Riposo Forzato",
+            timing="recovery_schedule",
+            status="scheduled",
+        ),
+        AnimalEffectEvent(
+            player_id=2,
+            animal="Coniglio",
+            card_color="RED",
+            card_value=1,
+            effect_id=CONIGLIO_SCATTO_IMPROVVISO,
+            effect_name="Scatto Improvviso",
+            timing="comparison",
+            status="applied",
+        ),
+        AnimalEffectEvent(
+            player_id=3,
+            animal="Scimmia",
+            card_color="GREEN",
+            card_value=1,
+            effect_id=SCIMMIA_FINTA_INNOCENTE,
+            effect_name="Finta Innocente",
+            timing="hunger_assignment",
+            status="applied",
+        ),
+        AnimalEffectEvent(
+            player_id=4,
+            animal="Scoiattolo",
+            card_color="YELLOW",
+            card_value=1,
+            effect_id=SCOIATTOLO_GHIANDA_NASCOSTA,
+            effect_name="Ghianda Nascosta",
+            timing="next_round_schedule",
+            status="scheduled",
+        ),
+    ]
+    simulation = SimulationResult(
+        players_count=4,
+        games_count=1,
+        base_seed=42,
+        game_results=[
+            GameResult(
+                game_id=1,
+                round_history=[RoundResult(round_number=1, animal_events=events)],
+            )
+        ],
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    rows_by_color = {row["card_color"]: row for row in rows}
+    assert rows_by_color["BLUE"]["card_display_color"] == "green"
+    assert rows_by_color["RED"]["card_display_color"] == "orange"
+    assert rows_by_color["GREEN"]["card_display_color"] == "yellow"
+    assert rows_by_color["YELLOW"]["card_display_color"] == "brown"
 
 
 def test_animal_effect_events_csv_exports_grande_letargo_events(tmp_path):

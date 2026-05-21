@@ -25,6 +25,11 @@ def test_statistic_aggregator_returns_required_fields():
     assert 0 <= stats["draw_rate"] <= 1
     assert "wins_by_player_id" in stats
     assert "wins_by_color" in stats
+    assert "wins_by_animal" in stats
+    assert "wins_by_display_color" in stats
+    assert "win_rate_by_color" in stats
+    assert "win_rate_by_animal" in stats
+    assert "win_rate_by_display_color" in stats
     assert "wins_by_strategy" in stats
     assert "win_rate_by_strategy" in stats
     assert "eliminations_by_lives" in stats
@@ -51,6 +56,98 @@ def test_statistic_aggregator_empty_input_is_stable():
     assert stats["min_rounds"] == 0
     assert stats["max_rounds"] == 0
     assert stats["draw_rate"] == 0.0
+    assert stats["wins_by_color"] == {
+        "BLUE": 0,
+        "RED": 0,
+        "GREEN": 0,
+        "YELLOW": 0,
+    }
+    assert stats["wins_by_animal"] == {
+        "Panda": 0,
+        "Coniglio": 0,
+        "Scimmia": 0,
+        "Scoiattolo": 0,
+    }
+    assert stats["wins_by_display_color"] == {
+        "green": 0,
+        "orange": 0,
+        "yellow": 0,
+        "brown": 0,
+    }
+
+
+def test_statistic_aggregator_adds_animal_and_display_color_win_stats():
+    results = [
+        GameResult(
+            game_id=1,
+            winner_ids=[1],
+            is_draw=False,
+            rounds_count=1,
+            final_players=[
+                PlayerState(player_id=1, color=Color.BLUE, lives=5),
+            ],
+        ),
+        GameResult(
+            game_id=2,
+            winner_ids=[1],
+            is_draw=False,
+            rounds_count=1,
+            final_players=[
+                PlayerState(player_id=1, color=Color.RED, lives=5),
+            ],
+        ),
+        GameResult(
+            game_id=3,
+            winner_ids=[1],
+            is_draw=False,
+            rounds_count=1,
+            final_players=[
+                PlayerState(player_id=1, color=Color.GREEN, lives=5),
+            ],
+        ),
+        GameResult(
+            game_id=4,
+            winner_ids=[1],
+            is_draw=False,
+            rounds_count=1,
+            final_players=[
+                PlayerState(player_id=1, color=Color.YELLOW, lives=5),
+            ],
+        ),
+    ]
+
+    stats = StatisticAggregator().aggregate(results)
+
+    assert stats["wins_by_color"] == {
+        "BLUE": 1,
+        "RED": 1,
+        "GREEN": 1,
+        "YELLOW": 1,
+    }
+    assert stats["wins_by_animal"] == {
+        "Panda": 1,
+        "Coniglio": 1,
+        "Scimmia": 1,
+        "Scoiattolo": 1,
+    }
+    assert stats["wins_by_display_color"] == {
+        "green": 1,
+        "orange": 1,
+        "yellow": 1,
+        "brown": 1,
+    }
+    assert stats["win_rate_by_animal"] == {
+        "Panda": 0.25,
+        "Coniglio": 0.25,
+        "Scimmia": 0.25,
+        "Scoiattolo": 0.25,
+    }
+    assert stats["win_rate_by_display_color"] == {
+        "green": 0.25,
+        "orange": 0.25,
+        "yellow": 0.25,
+        "brown": 0.25,
+    }
 
 
 def test_statistic_aggregator_does_not_count_non_draw_winner_as_eliminated():

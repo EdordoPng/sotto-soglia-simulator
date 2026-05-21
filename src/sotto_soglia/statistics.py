@@ -14,6 +14,11 @@ from sotto_soglia.critical import (
     CRITICAL_CARD_IDS,
     V05_HUNGER_CARD_IDS,
 )
+from sotto_soglia.animal_effects import (
+    ANIMAL_DISPLAY_NAMES,
+    get_animal_for_color,
+    get_display_color_for_technical_color,
+)
 from sotto_soglia.game import GameResult
 from sotto_soglia.models import Color, EliminationReason
 
@@ -35,6 +40,8 @@ class StatisticAggregator:
         draw_count = sum(1 for result in game_results if result.is_draw)
         wins_by_player_id: dict[int, int] = {}
         wins_by_color = {color.name: 0 for color in Color}
+        wins_by_animal = self._zero_wins_by_animal()
+        wins_by_display_color = self._zero_wins_by_display_color()
         wins_by_strategy: dict[str, int] = {}
         winner_lives: list[int] = []
         winner_critical_wounds: list[int] = []
@@ -65,6 +72,12 @@ class StatisticAggregator:
                 winner = player_by_id[winner_id]
                 wins_by_player_id[winner_id] = wins_by_player_id.get(winner_id, 0) + 1
                 wins_by_color[winner.color.name] += 1
+                wins_by_animal[
+                    self._animal_display_name_for_color(winner.color)
+                ] += 1
+                wins_by_display_color[
+                    get_display_color_for_technical_color(winner.color)
+                ] += 1
                 wins_by_strategy[winner.strategy_name] += 1
                 winner_lives.append(winner.lives)
                 winner_critical_wounds.append(winner.critical_wounds)
@@ -78,6 +91,8 @@ class StatisticAggregator:
             "draw_rate": draw_count / games_count,
             "wins_by_player_id": wins_by_player_id,
             "wins_by_color": wins_by_color,
+            "wins_by_animal": wins_by_animal,
+            "wins_by_display_color": wins_by_display_color,
             "wins_by_strategy": wins_by_strategy,
             "win_rate_by_player_id": {
                 player_id: wins / games_count
@@ -86,6 +101,14 @@ class StatisticAggregator:
             "win_rate_by_color": {
                 color: wins / games_count
                 for color, wins in wins_by_color.items()
+            },
+            "win_rate_by_animal": {
+                animal: wins / games_count
+                for animal, wins in wins_by_animal.items()
+            },
+            "win_rate_by_display_color": {
+                display_color: wins / games_count
+                for display_color, wins in wins_by_display_color.items()
             },
             "win_rate_by_strategy": {
                 strategy: wins / games_count
@@ -111,9 +134,19 @@ class StatisticAggregator:
             "draw_rate": 0.0,
             "wins_by_player_id": {},
             "wins_by_color": {color.name: 0 for color in Color},
+            "wins_by_animal": self._zero_wins_by_animal(),
+            "wins_by_display_color": self._zero_wins_by_display_color(),
             "wins_by_strategy": {},
             "win_rate_by_player_id": {},
             "win_rate_by_color": {color.name: 0.0 for color in Color},
+            "win_rate_by_animal": {
+                animal: 0.0
+                for animal in self._zero_wins_by_animal()
+            },
+            "win_rate_by_display_color": {
+                display_color: 0.0
+                for display_color in self._zero_wins_by_display_color()
+            },
             "win_rate_by_strategy": {},
             "eliminations_by_lives": 0,
             "eliminations_by_critical_wounds": 0,
@@ -129,6 +162,27 @@ class StatisticAggregator:
         if not values:
             return 0.0
         return sum(values) / len(values)
+
+    def _zero_wins_by_animal(self) -> dict[str, int]:
+        """Return stable zero win counters by semantic animal."""
+
+        return {
+            self._animal_display_name_for_color(color): 0
+            for color in Color
+        }
+
+    def _zero_wins_by_display_color(self) -> dict[str, int]:
+        """Return stable zero win counters by physical display color."""
+
+        return {
+            get_display_color_for_technical_color(color): 0
+            for color in Color
+        }
+
+    def _animal_display_name_for_color(self, color: Color) -> str:
+        """Return the animal display name for a legacy technical color."""
+
+        return ANIMAL_DISPLAY_NAMES[get_animal_for_color(color)]
 
     def _empty_critical_card_stats(self) -> dict:
         """Return stable zero critical-card aggregate metrics."""

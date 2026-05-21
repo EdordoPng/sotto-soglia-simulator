@@ -8,8 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from sotto_soglia import __version__
+from sotto_soglia.animal_effects import (
+    ANIMAL_DISPLAY_NAMES,
+    get_animal_for_color,
+    get_display_color_for_technical_color,
+)
 from sotto_soglia.critical import get_critical_deck_profile
-from sotto_soglia.models import EliminationReason, PlayerState
+from sotto_soglia.models import Color, EliminationReason, PlayerState
 from sotto_soglia.parametric import ParametricSimulationResult
 from sotto_soglia.simulation import SimulationResult
 
@@ -174,6 +179,8 @@ def write_games_summary_csv(
         "is_draw",
         "strategy_names",
         "winner_colors",
+        "winner_animals",
+        "winner_display_colors",
         "winner_strategies",
         "final_alive_players",
         "eliminated_by_lives",
@@ -206,6 +213,14 @@ def write_games_summary_csv(
                         for player in game_result.final_players
                     ),
                     "winner_colors": "|".join(player.color.name for player in winners),
+                    "winner_animals": "|".join(
+                        get_animal_display_name_for_technical_color(player.color)
+                        for player in winners
+                    ),
+                    "winner_display_colors": "|".join(
+                        get_display_color_for_technical_color(player.color)
+                        for player in winners
+                    ),
                     "winner_strategies": "|".join(
                         player.strategy_name
                         for player in winners
@@ -518,6 +533,7 @@ def write_animal_effect_events_csv(
         "player_id",
         "animal",
         "card_color",
+        "card_display_color",
         "card_value",
         "effect_id",
         "effect_name",
@@ -545,6 +561,11 @@ def write_animal_effect_events_csv(
                             "player_id": event.player_id,
                             "animal": event.animal,
                             "card_color": event.card_color,
+                            "card_display_color": (
+                                get_display_color_for_event_card_color(
+                                    event.card_color
+                                )
+                            ),
                             "card_value": event.card_value,
                             "effect_id": event.effect_id,
                             "effect_name": event.effect_name,
@@ -585,6 +606,18 @@ def join_ids(values) -> str:
     """Serialize ids or numeric values as a pipe-separated string."""
 
     return "|".join(str(value) for value in values)
+
+
+def get_animal_display_name_for_technical_color(color: Color) -> str:
+    """Return the animal display name for a legacy technical color."""
+
+    return ANIMAL_DISPLAY_NAMES[get_animal_for_color(color)]
+
+
+def get_display_color_for_event_card_color(card_color: str) -> str:
+    """Return the display color for a CSV event technical color name."""
+
+    return get_display_color_for_technical_color(Color[card_color])
 
 
 def serialize_player_damage_map(damage_by_player: dict[int, int]) -> str:
