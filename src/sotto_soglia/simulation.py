@@ -3,8 +3,10 @@
 from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 
+from sotto_soglia.animal_effects import ANIMAL_DISPLAY_NAMES, get_animal_for_color
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.game import GameResult, play_game
+from sotto_soglia.models import Color
 from sotto_soglia.statistics import StatisticAggregator
 from sotto_soglia.strategies import BaseStrategy
 
@@ -28,6 +30,18 @@ class SimulationResult:
     critical_deck_seed: int | None = None
     critical_deck_order: tuple[str, ...] | None = None
     sono_ancora_qui_variant: str = "single_2"
+    animal_lineup: tuple[Color, ...] | None = None
+
+    @property
+    def animal_lineup_names(self) -> list[str]:
+        """Return the configured animal lineup as display names."""
+
+        if self.animal_lineup is None:
+            return []
+        return [
+            ANIMAL_DISPLAY_NAMES[get_animal_for_color(color)]
+            for color in self.animal_lineup
+        ]
 
 
 class SimulationRunner:
@@ -81,4 +95,5 @@ class SimulationRunner:
             critical_deck_seed=config.critical_deck_seed,
             critical_deck_order=config.critical_deck_order,
             sono_ancora_qui_variant=config.sono_ancora_qui_variant,
+            animal_lineup=config.animal_lineup,
         )

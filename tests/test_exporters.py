@@ -193,6 +193,23 @@ def test_simulation_config_json_exports_animal_card_effects_enabled_false(tmp_pa
     assert data["animal_card_effects_enabled"] is False
 
 
+def test_simulation_config_json_exports_animal_lineup(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=2,
+        games_count=1,
+        seed=42,
+        config=GameConfig(
+            animal_lineup=(Color.RED, Color.YELLOW),
+        ),
+    )
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["simulation_config"].open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    assert data["animal_lineup"] == ["Coniglio", "Scoiattolo"]
+
+
 def test_simulation_config_json_exports_custom_cards_per_player(tmp_path):
     simulation = SimulationRunner().run(
         players_count=4,
@@ -398,6 +415,79 @@ def test_games_summary_csv_exports_winner_animals_and_display_colors(tmp_path):
     assert rows_by_color["GREEN"]["winner_display_colors"] == "yellow"
     assert rows_by_color["YELLOW"]["winner_animals"] == "Scoiattolo"
     assert rows_by_color["YELLOW"]["winner_display_colors"] == "brown"
+
+
+def test_standard_export_respects_explicit_two_player_animal_lineup(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=2,
+        games_count=5,
+        seed=42,
+        config=GameConfig(
+            animal_lineup=(Color.RED, Color.YELLOW),
+        ),
+        strategies=create_strategy("v05_animal_aware"),
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["games_summary"].open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    winner_animals = {
+        animal
+        for row in rows
+        for animal in row["winner_animals"].split("|")
+        if animal
+    }
+    assert winner_animals <= {"Coniglio", "Scoiattolo"}
+    assert "Panda" not in winner_animals
+
+    with exported_files["aggregate_stats"].open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    assert data["wins_by_animal"]["Panda"] == 0
+    assert data["wins_by_animal"]["Scimmia"] == 0
+
+    with exported_files["animal_effect_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        animal_rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert {row["animal"] for row in animal_rows} <= {"Coniglio", "Scoiattolo"}
+    assert {row["card_color"] for row in animal_rows} <= {"RED", "YELLOW"}
+    assert {row["card_display_color"] for row in animal_rows} <= {"orange", "brown"}
+
+
+def test_strategy_decision_events_csv_respects_explicit_lineup(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=2,
+        games_count=1,
+        seed=42,
+        config=GameConfig(
+            initial_lives=12,
+            critical_wounds_limit=5,
+            color_effects_enabled=False,
+            critical_card_effects_enabled=True,
+            animal_card_effects_enabled=True,
+            critical_deck_profile_id=V05_HUNGER_DECK_PROFILE_ID,
+            animal_lineup=(Color.RED, Color.YELLOW),
+        ),
+        strategies=create_strategy("v05_animal_aware"),
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["strategy_decision_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert rows
+    assert {row["technical_color"] for row in rows} <= {"RED", "YELLOW"}
+    assert {row["animal"] for row in rows} <= {"Coniglio", "Scoiattolo"}
+    assert {row["display_color"] for row in rows} <= {"orange", "brown"}
 
 
 def test_rounds_summary_csv_is_valid(tmp_path):

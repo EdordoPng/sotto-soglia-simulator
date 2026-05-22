@@ -10,13 +10,14 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.cli import build_game_config_from_args
+from sotto_soglia.cli import build_arg_parser, build_game_config_from_args
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     LEGACY_CRITICAL_DECK_PROFILE_ID,
     V05_HUNGER_DECK_PROFILE_ID,
 )
 from sotto_soglia.simulation import SimulationRunner
+from sotto_soglia.models import Color
 
 
 def _cli_args(
@@ -35,6 +36,7 @@ def _cli_args(
         critical_deck_seed=None,
         critical_deck_order=None,
         sono_ancora_qui_variant="single_2",
+        animal_lineup=None,
     )
 
 
@@ -173,6 +175,50 @@ def test_cli_config_manual_overrides_take_precedence_over_v05_presets():
 
     assert config.initial_lives == 30
     assert config.critical_wounds_limit == 6
+
+
+def test_cli_parser_accepts_valid_two_player_animal_lineup():
+    args = build_arg_parser().parse_args(
+        ["--players", "2", "--animal-lineup", "Panda", "Scoiattolo"]
+    )
+
+    assert args.animal_lineup == ["Panda", "Scoiattolo"]
+    config = build_game_config_from_args(args)
+    assert config.animal_lineup == (Color.BLUE, Color.YELLOW)
+
+
+def test_cli_parser_accepts_valid_three_player_animal_lineup():
+    args = build_arg_parser().parse_args(
+        ["--players", "3", "--animal-lineup", "Coniglio", "Scimmia", "Scoiattolo"]
+    )
+
+    assert args.animal_lineup == ["Coniglio", "Scimmia", "Scoiattolo"]
+    config = build_game_config_from_args(args)
+    assert config.animal_lineup == (Color.RED, Color.GREEN, Color.YELLOW)
+
+
+def test_cli_config_rejects_animal_lineup_length_mismatch():
+    args = _cli_args(2)
+    args.animal_lineup = ["Panda", "Coniglio", "Scimmia"]
+
+    with pytest.raises(ValueError, match="one animal per player"):
+        build_game_config_from_args(args)
+
+
+def test_cli_config_rejects_duplicate_animal_lineup():
+    args = _cli_args(2)
+    args.animal_lineup = ["Panda", "Panda"]
+
+    with pytest.raises(ValueError, match="duplicate animals"):
+        build_game_config_from_args(args)
+
+
+def test_cli_config_rejects_unknown_animal_lineup():
+    args = _cli_args(2)
+    args.animal_lineup = ["Panda", "Volpe"]
+
+    with pytest.raises(ValueError, match="unknown animal"):
+        build_game_config_from_args(args)
 
 
 def test_simulation_runner_uses_v05_preset_when_config_is_omitted():

@@ -1,5 +1,6 @@
 import csv
 import json
+from dataclasses import replace
 from pathlib import Path
 import subprocess
 import sys
@@ -193,6 +194,36 @@ def test_parametric_runner_preserves_v05_base_config():
         assert simulation_result.cards_per_player == 3
 
 
+def test_parametric_runner_preserves_animal_lineup_in_all_configurations():
+    base_config = replace(
+        get_v05_config_for_players(2),
+        animal_lineup=(Color.BLUE, Color.YELLOW),
+    )
+
+    result = ParametricSimulationRunner().run(
+        players_count=2,
+        games_per_config=1,
+        seed=42,
+        initial_lives_values=[10, 12],
+        critical_wounds_values=[5, 6],
+        color_effects_values=[False],
+        strategy_names="v05_animal_aware",
+        base_config=base_config,
+    )
+
+    assert result.animal_lineup == (Color.BLUE, Color.YELLOW)
+    for config_result in result.config_results:
+        assert config_result.animal_lineup == (Color.BLUE, Color.YELLOW)
+        assert config_result.simulation_result.animal_lineup == (
+            Color.BLUE,
+            Color.YELLOW,
+        )
+        assert [
+            player.color
+            for player in config_result.simulation_result.game_results[0].final_players
+        ] == [Color.BLUE, Color.YELLOW]
+
+
 def test_parametric_runner_without_base_config_keeps_legacy_defaults():
     result = ParametricSimulationRunner().run(
         players_count=2,
@@ -208,6 +239,25 @@ def test_parametric_runner_without_base_config_keeps_legacy_defaults():
 
     assert config_result.animal_card_effects_enabled is False
     assert config_result.critical_card_effects_enabled is False
+
+
+def test_parametric_runner_without_animal_lineup_keeps_default_player_colors():
+    result = ParametricSimulationRunner().run(
+        players_count=3,
+        games_per_config=1,
+        seed=42,
+        initial_lives_values=[18],
+        critical_wounds_values=[3],
+        color_effects_values=[True],
+        strategy_names="random",
+    )
+
+    final_players = result.config_results[0].simulation_result.game_results[0].final_players
+    assert [player.color for player in final_players] == [
+        Color.BLUE,
+        Color.RED,
+        Color.GREEN,
+    ]
 
 
 def test_parametric_export_creates_json_and_csv(tmp_path):
@@ -279,6 +329,38 @@ def test_parametric_export_includes_v05_config_fields(tmp_path):
     assert row["cards_per_player"] == "3"
 
 
+def test_parametric_export_includes_animal_lineup(tmp_path):
+    result = ParametricSimulationRunner().run(
+        players_count=2,
+        games_per_config=1,
+        seed=42,
+        initial_lives_values=[10],
+        critical_wounds_values=[5],
+        color_effects_values=[False],
+        strategy_names="v05_animal_aware",
+        base_config=replace(
+            get_v05_config_for_players(2),
+            animal_lineup=(Color.BLUE, Color.YELLOW),
+        ),
+    )
+
+    exported_files = export_parametric_simulation_result(result, tmp_path)
+
+    with exported_files["parametric_stats"].open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    assert data["animal_lineup"] == ["Panda", "Scoiattolo"]
+    assert data["config_results"][0]["animal_lineup"] == ["Panda", "Scoiattolo"]
+
+    with exported_files["parametric_summary"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        row = next(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert row["animal_lineup"] == "Panda|Scoiattolo"
+
+
 def test_cli_parametric_preserves_v05_config_fields(tmp_path):
     command = [
         sys.executable,
@@ -321,3 +403,43 @@ def test_cli_parametric_preserves_v05_config_fields(tmp_path):
         assert config_data["critical_card_effects_enabled"] is True
         assert config_data["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
         assert config_data["cards_per_player"] == 3
+
+
+def test_cli_parametric_accepts_animal_lineup_and_exports_it(tmp_path):
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "run_simulation.py"),
+        "--players",
+        "2",
+        "--games",
+        "1",
+        "--seed",
+        "42",
+        "--parametric",
+        "--strategy",
+        "v05_animal_aware",
+        "--animal-lineup",
+        "Panda",
+        "Scoiattolo",
+        "--lives-values",
+        "10",
+        "--critical-wounds-values",
+        "5",
+        "--color-effects",
+        "off",
+        "--animal-card-effects",
+        "on",
+        "--critical-card-effects",
+        "on",
+        "--export",
+        "--output-dir",
+        str(tmp_path),
+    ]
+
+    subprocess.run(command, check=True, capture_output=True, text=True)
+
+    with (tmp_path / "parametric_stats.json").open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    assert data["animal_lineup"] == ["Panda", "Scoiattolo"]
+    assert data["config_results"][0]["animal_lineup"] == ["Panda", "Scoiattolo"]

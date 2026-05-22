@@ -3,6 +3,7 @@
 import argparse
 from dataclasses import replace
 
+from sotto_soglia.animal_effects import ANIMAL_DISPLAY_NAMES, COLOR_BY_ANIMAL
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import (
     LEGACY_CRITICAL_DECK_PROFILE_ID,
@@ -59,7 +60,12 @@ def format_simulation_summary(result: SimulationResult) -> str:
         lines.append(f"- Player {player_id}: {wins} wins ({rate * 100:.2f}%)")
 
     lines.extend(["", "Win rate by color:"])
-    for color in list(Color)[: result.players_count]:
+    colors = (
+        list(result.animal_lineup)
+        if result.animal_lineup
+        else list(Color)[: result.players_count]
+    )
+    for color in colors:
         wins = stats["wins_by_color"].get(color.name, 0)
         rate = stats["win_rate_by_color"].get(color.name, 0.0)
         lines.append(f"- {color.name}: {wins} wins ({rate * 100:.2f}%)")
@@ -213,6 +219,42 @@ def parse_on_off(value: str, option_name: str) -> bool:
     raise ValueError(f"{option_name} must be one of: on, off")
 
 
+ANIMAL_NAME_TO_COLOR = {
+    display_name: COLOR_BY_ANIMAL[animal]
+    for animal, display_name in ANIMAL_DISPLAY_NAMES.items()
+}
+
+
+def parse_animal_lineup(
+    animal_names: list[str] | None,
+    players_count: int,
+) -> tuple[Color, ...] | None:
+    """Parse and validate an optional display-name animal lineup."""
+
+    if animal_names is None:
+        return None
+    if len(animal_names) != players_count:
+        raise ValueError("--animal-lineup must provide one animal per player")
+
+    allowed_names = ", ".join(sorted(ANIMAL_NAME_TO_COLOR))
+    unknown_names = [
+        animal_name
+        for animal_name in animal_names
+        if animal_name not in ANIMAL_NAME_TO_COLOR
+    ]
+    if unknown_names:
+        raise ValueError(
+            "--animal-lineup contains unknown animal(s): "
+            + ", ".join(unknown_names)
+            + f". Allowed animals: {allowed_names}"
+        )
+
+    if len(set(animal_names)) != len(animal_names):
+        raise ValueError("--animal-lineup must not contain duplicate animals")
+
+    return tuple(ANIMAL_NAME_TO_COLOR[animal_name] for animal_name in animal_names)
+
+
 def format_strategy_setup(strategy_names: str | list[str]) -> str:
     """Format strategy settings for terminal output."""
 
@@ -255,12 +297,18 @@ def build_game_config_from_args(args: argparse.Namespace) -> GameConfig:
         if args.critical_wounds_max <= 0:
             raise ValueError("--critical-wounds-max must be greater than 0")
         config_values["critical_wounds_limit"] = args.critical_wounds_max
+    animal_lineup = parse_animal_lineup(
+        getattr(args, "animal_lineup", None),
+        args.players,
+    )
+    if animal_lineup is not None:
+        config_values["animal_lineup"] = animal_lineup
 
     return replace(config, **config_values)
 
 
-def main() -> None:
-    """Parse CLI arguments and run aggregate simulations."""
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line argument parser."""
 
     parser = argparse.ArgumentParser(description="Sotto Soglia simulation runner.")
     parser.add_argument("--players", type=int, default=4, help="Number of players.")
@@ -354,6 +402,15 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--animal-lineup",
+        nargs="+",
+        help=(
+            "Explicit animal lineup in player order. "
+            "Examples: --animal-lineup Panda Scoiattolo; "
+            "--animal-lineup Panda Scimmia Scoiattolo."
+        ),
+    )
+    parser.add_argument(
         "--critical-deck-seed",
         type=int,
         default=None,
@@ -370,7 +427,13 @@ def main() -> None:
         default="single_2",
         help="Experimental Sono ancora qui variant used when critical-card-effects is on (default: single_2).",
     )
+    return parser
 
+
+def main() -> None:
+    """Parse CLI arguments and run aggregate simulations."""
+
+    parser = build_arg_parser()
     args = parser.parse_args()
     if args.plot_parametric:
         if args.parametric:

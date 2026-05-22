@@ -6,6 +6,7 @@ from sotto_soglia.critical import (
     LEGACY_CRITICAL_DECK_PROFILE_ID,
     V05_HUNGER_DECK_PROFILE_ID,
 )
+from sotto_soglia.models import Color
 
 
 V05_PLAYER_PRESETS = {
@@ -50,6 +51,7 @@ class GameConfig:
     critical_deck_seed: int | None = None
     critical_deck_order: tuple[str, ...] | None = None
     sono_ancora_qui_variant: str = "single_2"
+    animal_lineup: tuple[Color, ...] | None = None
 
 
 def get_v05_config_for_players(

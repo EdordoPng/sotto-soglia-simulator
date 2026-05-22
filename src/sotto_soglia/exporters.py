@@ -62,6 +62,7 @@ def export_simulation_result(
         "critical_deck_seed": simulation_result.critical_deck_seed,
         "critical_deck_order": simulation_result.critical_deck_order,
         "sono_ancora_qui_variant": simulation_result.sono_ancora_qui_variant,
+        "animal_lineup": simulation_result.animal_lineup_names,
         "generated_files": {
             name: path.name
             for name, path in paths.items()
@@ -141,6 +142,7 @@ def export_parametric_simulation_result(
         "total_games": parametric_result.total_games,
         "base_seed": parametric_result.base_seed,
         "baseline_config": parametric_result.baseline_config,
+        "animal_lineup": animal_lineup_names(parametric_result.animal_lineup),
         "config_results": [
             {
                 "config_id": config_result.config_id,
@@ -156,6 +158,7 @@ def export_parametric_simulation_result(
                 ),
                 "critical_deck_profile_id": config_result.critical_deck_profile_id,
                 "cards_per_player": config_result.cards_per_player,
+                "animal_lineup": animal_lineup_names(config_result.animal_lineup),
                 "is_baseline": config_result.is_baseline,
                 "aggregate_stats": config_result.aggregate_stats,
             }
@@ -322,6 +325,7 @@ def write_parametric_summary_csv(
         "critical_card_effects_enabled",
         "critical_deck_profile_id",
         "cards_per_player",
+        "animal_lineup",
         "average_rounds",
         "min_rounds",
         "max_rounds",
@@ -358,6 +362,9 @@ def write_parametric_summary_csv(
                     ),
                     "critical_deck_profile_id": config_result.critical_deck_profile_id,
                     "cards_per_player": config_result.cards_per_player,
+                    "animal_lineup": "|".join(
+                        animal_lineup_names(config_result.animal_lineup)
+                    ),
                     "average_rounds": f"{stats['average_rounds']:.2f}",
                     "min_rounds": stats["min_rounds"],
                     "max_rounds": stats["max_rounds"],
@@ -703,6 +710,17 @@ def get_animal_display_name_for_technical_color(color: Color) -> str:
     """Return the animal display name for a legacy technical color."""
 
     return ANIMAL_DISPLAY_NAMES[get_animal_for_color(color)]
+
+
+def animal_lineup_names(animal_lineup: tuple[Color, ...] | None) -> list[str]:
+    """Return display names for an optional technical-color lineup."""
+
+    if animal_lineup is None:
+        return []
+    return [
+        get_animal_display_name_for_technical_color(color)
+        for color in animal_lineup
+    ]
 
 
 def get_display_color_for_event_card_color(card_color: str) -> str:

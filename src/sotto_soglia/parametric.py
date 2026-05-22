@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from sotto_soglia.config import GameConfig
+from sotto_soglia.models import Color
 from sotto_soglia.simulation import SimulationResult, SimulationRunner
 from sotto_soglia.strategies import BaseStrategy, create_strategy
 
@@ -28,6 +29,7 @@ class ParametricConfigResult:
     critical_card_effects_enabled: bool
     critical_deck_profile_id: str
     cards_per_player: int
+    animal_lineup: tuple[Color, ...] | None
     simulation_result: SimulationResult
     aggregate_stats: dict
     is_baseline: bool = False
@@ -44,6 +46,7 @@ class ParametricSimulationResult:
     total_games: int
     config_results: list[ParametricConfigResult] = field(default_factory=list)
     baseline_config: dict = field(default_factory=lambda: dict(BASELINE_CONFIG))
+    animal_lineup: tuple[Color, ...] | None = None
 
 
 class ParametricSimulationRunner:
@@ -110,6 +113,7 @@ class ParametricSimulationRunner:
                     critical_card_effects_enabled=config.critical_card_effects_enabled,
                     critical_deck_profile_id=config.critical_deck_profile_id,
                     cards_per_player=config.cards_per_player,
+                    animal_lineup=config.animal_lineup,
                     simulation_result=simulation_result,
                     aggregate_stats=simulation_result.aggregate_stats,
                     is_baseline=self._is_baseline(config),
@@ -124,6 +128,7 @@ class ParametricSimulationRunner:
             tested_configs=tested_configs,
             total_games=tested_configs * games_per_config,
             config_results=config_results,
+            animal_lineup=base_config.animal_lineup if base_config else None,
         )
 
     def _build_configs(

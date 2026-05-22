@@ -11,7 +11,7 @@ if str(SRC_PATH) not in sys.path:
 from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import V05_HUNGER_CARD_IDS
 import sotto_soglia.game as game_module
-from sotto_soglia.game import GameResult, play_game
+from sotto_soglia.game import GameResult, create_players, play_game
 from sotto_soglia.animal_effects import CONIGLIO_SCATTO_IMPROVVISO
 from sotto_soglia.models import Card, Color
 from sotto_soglia.round import RoundResult
@@ -83,6 +83,70 @@ def test_play_game_with_four_players_returns_valid_result():
     assert Counter(result.initial_critical_deck_order) == {
         card_id: 3 for card_id in V05_HUNGER_CARD_IDS
     }
+
+
+def test_create_players_uses_first_two_colors_without_animal_lineup():
+    players = create_players(2, GameConfig(animal_lineup=None))
+
+    assert [player.color for player in players] == [Color.BLUE, Color.RED]
+
+
+def test_create_players_uses_first_three_colors_without_animal_lineup():
+    players = create_players(3, GameConfig(animal_lineup=None))
+
+    assert [player.color for player in players] == [
+        Color.BLUE,
+        Color.RED,
+        Color.GREEN,
+    ]
+
+
+def test_create_players_uses_all_colors_without_animal_lineup_for_four_players():
+    players = create_players(4, GameConfig(animal_lineup=None))
+
+    assert [player.color for player in players] == [
+        Color.BLUE,
+        Color.RED,
+        Color.GREEN,
+        Color.YELLOW,
+    ]
+
+
+def test_create_players_uses_explicit_animal_lineup_order():
+    players = create_players(
+        2,
+        GameConfig(animal_lineup=(Color.RED, Color.YELLOW)),
+    )
+
+    assert [player.player_id for player in players] == [1, 2]
+    assert [player.color for player in players] == [Color.RED, Color.YELLOW]
+
+
+def test_create_players_rejects_explicit_animal_lineup_length_mismatch():
+    try:
+        create_players(
+            2,
+            GameConfig(animal_lineup=(Color.BLUE, Color.RED, Color.GREEN)),
+        )
+    except ValueError as error:
+        assert str(error) == "animal_lineup length must match players_count"
+        return
+
+    assert False, "Expected ValueError for animal_lineup length mismatch"
+
+
+def test_play_game_respects_explicit_animal_lineup_colors():
+    result = play_game(
+        game_id=1,
+        players_count=2,
+        seed=42,
+        config=GameConfig(animal_lineup=(Color.RED, Color.YELLOW)),
+    )
+
+    assert [player.color for player in result.final_players] == [
+        Color.RED,
+        Color.YELLOW,
+    ]
 
 
 def test_play_game_collects_strategy_decision_events_for_v05_balanced(monkeypatch):

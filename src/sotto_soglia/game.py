@@ -63,7 +63,15 @@ def create_players(players_count: int, config: GameConfig) -> list[PlayerState]:
             f"players_count must be between {config.min_players} and {config.max_players}"
         )
 
-    colors = list(Color)
+    if config.animal_lineup is not None:
+        colors = list(config.animal_lineup)
+        if len(colors) != players_count:
+            raise ValueError("animal_lineup length must match players_count")
+        if len(set(colors)) != len(colors):
+            raise ValueError("animal_lineup must not contain duplicate animals")
+    else:
+        colors = list(Color)[:players_count]
+
     return [
         PlayerState(
             player_id=player_index + 1,

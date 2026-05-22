@@ -118,6 +118,30 @@ def test_tournament_runner_works_with_two_players_and_two_strategies():
     assert "win_rate_by_strategy" in result.aggregate_stats
 
 
+def test_tournament_runner_uses_default_colors_for_two_players():
+    result = StrategyTournamentRunner().run(
+        players_count=2,
+        strategy_names=["adaptive_pressure", "random"],
+        games_per_lineup=1,
+        seed=42,
+    )
+
+    final_players = result.lineup_results[0].simulation_result.game_results[0].final_players
+    assert [player.color.name for player in final_players] == ["BLUE", "RED"]
+
+
+def test_tournament_runner_uses_default_colors_for_three_players():
+    result = StrategyTournamentRunner().run(
+        players_count=3,
+        strategy_names=["adaptive_pressure", "random", "defensive"],
+        games_per_lineup=1,
+        seed=42,
+    )
+
+    final_players = result.lineup_results[0].simulation_result.game_results[0].final_players
+    assert [player.color.name for player in final_players] == ["BLUE", "RED", "GREEN"]
+
+
 def test_tournament_runner_accepts_v05_animal_aware_strategy():
     result = StrategyTournamentRunner().run(
         players_count=2,
