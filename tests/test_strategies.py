@@ -21,6 +21,7 @@ from sotto_soglia.strategies import (
     MixedStrategy,
     PrudentStrategy,
     V05BalancedStrategy,
+    V05AnimalAwareStrategy,
     V05BasicStrategy,
     create_strategy,
 )
@@ -72,6 +73,7 @@ def test_create_strategy_builds_all_available_strategies():
         "mixed",
         "v05_basic",
         "v05_balanced",
+        "v05_animal_aware",
         "adaptive_pressure",
     ]:
         strategy = create_strategy(strategy_name)
@@ -849,6 +851,282 @@ def test_cli_accepts_v05_balanced_strategy():
 
     assert "Win rate by strategy:" in result.stdout
     assert "- v05_balanced:" in result.stdout
+
+
+def test_create_strategy_builds_v05_animal_aware_strategy():
+    strategy = create_strategy("v05_animal_aware")
+
+    assert isinstance(strategy, V05AnimalAwareStrategy)
+    assert "v05_animal_aware" in AVAILABLE_STRATEGIES
+
+
+def test_v05_animal_aware_strategy_returns_card_from_hand():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=18)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=18)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        hand,
+        _v05_game_state(player, opponent),
+        Random(1),
+    )
+
+    assert selected in hand
+
+
+def test_v05_animal_aware_evaluate_candidates_returns_one_candidate_per_card():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+
+    candidates = V05AnimalAwareStrategy().evaluate_candidates(
+        player,
+        hand,
+        _v05_game_state(player, opponent),
+    )
+
+    assert len(candidates) == len(hand)
+    assert {_candidate_card_tuple(candidate) for candidate in candidates} == {
+        _card_tuple(card)
+        for card in hand
+    }
+    _assert_single_chosen_with_consecutive_ranks(candidates)
+
+
+def test_v05_animal_aware_evaluate_candidates_chosen_matches_choose_card():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.RED, 1),
+        Card(Color.BLUE, 3),
+        Card(Color.GREEN, 5),
+    ]
+    strategy = V05AnimalAwareStrategy()
+    game_state = _v05_game_state(player, opponent)
+
+    selected = strategy.choose_card(player, hand, game_state, Random(1))
+    candidates = strategy.evaluate_candidates(player, hand, game_state)
+    chosen = next(candidate for candidate in candidates if candidate.chosen)
+
+    assert _candidate_card_tuple(chosen) == _card_tuple(selected)
+
+
+def test_v05_animal_aware_scores_are_deterministic():
+    player = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.YELLOW, 3),
+        Card(Color.GREEN, 3),
+        Card(Color.BLUE, 3),
+    ]
+    strategy = V05AnimalAwareStrategy()
+    game_state = _v05_game_state(player, opponent)
+
+    first = strategy.evaluate_candidates(player, hand, game_state)
+    second = strategy.evaluate_candidates(player, hand, game_state)
+
+    assert [
+        (
+            candidate.candidate_card_color,
+            candidate.candidate_card_value,
+            candidate.score,
+            candidate.choice_rank,
+            candidate.chosen,
+        )
+        for candidate in first
+    ] == [
+        (
+            candidate.candidate_card_color,
+            candidate.candidate_card_value,
+            candidate.score,
+            candidate.choice_rank,
+            candidate.chosen,
+        )
+        for candidate in second
+    ]
+
+
+def test_v05_animal_aware_prefers_own_card_when_base_scores_are_close():
+    player = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    hand = [
+        Card(Color.YELLOW, 3),
+        Card(Color.GREEN, 3),
+    ]
+    game_state = _v05_game_state(player, opponent)
+
+    balanced_selected = V05BalancedStrategy().choose_card(
+        player,
+        hand,
+        game_state,
+        Random(1),
+    )
+    animal_aware_selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        hand,
+        game_state,
+        Random(1),
+    )
+
+    assert balanced_selected == Card(Color.GREEN, 3)
+    assert animal_aware_selected == Card(Color.YELLOW, 3)
+
+
+def test_v05_animal_aware_improves_coniglio_red_2_ranking():
+    player = PlayerState(player_id=1, color=Color.RED, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_2 = Card(Color.RED, 2)
+    efficient_blue_3 = Card(Color.BLUE, 3, custom_consumption_value=2)
+    hand = [red_2, efficient_blue_3]
+    game_state = _v05_game_state(player, opponent)
+
+    balanced_candidates = V05BalancedStrategy().evaluate_candidates(
+        player,
+        hand,
+        game_state,
+    )
+    animal_aware_candidates = V05AnimalAwareStrategy().evaluate_candidates(
+        player,
+        hand,
+        game_state,
+    )
+    balanced_red_2 = next(
+        candidate
+        for candidate in balanced_candidates
+        if _candidate_card_tuple(candidate) == ("RED", 2)
+    )
+    animal_aware_red_2 = next(
+        candidate
+        for candidate in animal_aware_candidates
+        if _candidate_card_tuple(candidate) == ("RED", 2)
+    )
+
+    assert balanced_red_2.choice_rank > animal_aware_red_2.choice_rank
+    assert animal_aware_red_2.chosen
+
+
+def test_v05_animal_aware_non_panda_blue_3_does_not_beat_close_good_own_card():
+    player = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    blue_3 = Card(Color.BLUE, 3, custom_consumption_value=2)
+    own_preparation = Card(Color.YELLOW, 4, custom_consumption_value=3)
+    hand = [blue_3, own_preparation]
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        hand,
+        _v05_game_state(player, opponent),
+        Random(1),
+    )
+
+    assert selected == own_preparation
+
+
+def test_v05_animal_aware_panda_can_still_choose_blue_3_when_sensible():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    blue_3 = Card(Color.BLUE, 3)
+    low_non_own = Card(Color.RED, 2)
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        [blue_3, low_non_own],
+        _v05_game_state(player, opponent),
+        Random(1),
+    )
+
+    assert selected == blue_3
+
+
+def test_v05_animal_aware_scimmia_bonus_does_not_override_clear_safety():
+    player = PlayerState(player_id=1, color=Color.GREEN, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    expensive_own = Card(Color.GREEN, 5)
+    safer_non_own = Card(Color.BLUE, 3, custom_consumption_value=2)
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        [expensive_own, safer_non_own],
+        _v05_game_state(player, opponent),
+        Random(1),
+    )
+
+    assert selected == safer_non_own
+
+
+def test_v05_animal_aware_scoiattolo_preparation_bonus_does_not_override_lethal_risk():
+    player = PlayerState(player_id=1, color=Color.YELLOW, lives=4)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    lethal_preparation = Card(Color.YELLOW, 4)
+    survivable = Card(Color.RED, 1)
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        [lethal_preparation, survivable],
+        _v05_game_state(player, opponent),
+        Random(1),
+    )
+
+    assert selected == survivable
+
+
+def test_simulation_runner_smoke_with_v05_animal_aware_strategy():
+    result = SimulationRunner().run(
+        players_count=4,
+        games_count=3,
+        seed=42,
+        strategies=create_strategy("v05_animal_aware"),
+    )
+
+    assert len(result.game_results) == 3
+    assert {
+        player.strategy_name
+        for player in result.game_results[0].final_players
+    } == {"v05_animal_aware"}
+
+
+def test_tournament_runner_accepts_v05_animal_aware_strategy():
+    result = StrategyTournamentRunner().run(
+        players_count=2,
+        strategy_names=["v05_animal_aware", "random"],
+        games_per_lineup=1,
+        seed=42,
+    )
+
+    assert result.lineups_tested == 2
+    assert "v05_animal_aware" in result.aggregate_stats["win_rate_by_strategy"]
+
+
+def test_cli_accepts_v05_animal_aware_strategy():
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "run_simulation.py"),
+            "--players",
+            "4",
+            "--games",
+            "5",
+            "--seed",
+            "42",
+            "--strategy",
+            "v05_animal_aware",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Win rate by strategy:" in result.stdout
+    assert "- v05_animal_aware:" in result.stdout
 
 
 def test_create_strategy_builds_adaptive_pressure_strategy():

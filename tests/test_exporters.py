@@ -558,6 +558,46 @@ def test_strategy_decision_events_csv_has_valid_chosen_and_rank_groups(tmp_path)
     assert saw_pipe_separated_reason_flags
 
 
+def test_strategy_decision_events_csv_exports_v05_animal_aware_candidate_rows(tmp_path):
+    simulation = SimulationRunner().run(
+        players_count=4,
+        games_count=1,
+        seed=42,
+        strategies=create_strategy("v05_animal_aware"),
+    )
+
+    exported_files = export_simulation_result(simulation, tmp_path)
+
+    with exported_files["strategy_decision_events"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        reader = csv.DictReader(file, delimiter=CSV_DELIMITER)
+        rows = list(reader)
+
+    assert reader.fieldnames == STRATEGY_DECISION_EVENT_FIELDS
+    assert rows
+    assert {row["strategy_name"] for row in rows} == {"v05_animal_aware"}
+
+    rows_by_decision = {}
+    for row in rows:
+        key = (row["game_index"], row["round_number"], row["player_id"])
+        rows_by_decision.setdefault(key, []).append(row)
+
+    assert rows_by_decision
+    for decision_rows in rows_by_decision.values():
+        chosen_rows = [
+            row
+            for row in decision_rows
+            if row["chosen"] == "True"
+        ]
+        assert len(chosen_rows) == 1
+        assert chosen_rows[0]["choice_rank"] == "1"
+        assert sorted(int(row["choice_rank"]) for row in decision_rows) == list(
+            range(1, len(decision_rows) + 1)
+        )
+
+
 def test_animal_effect_events_csv_exports_scatto_improvviso(tmp_path):
     simulation = SimulationResult(
         players_count=2,

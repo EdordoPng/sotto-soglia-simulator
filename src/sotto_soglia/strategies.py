@@ -5,6 +5,7 @@ from random import Random
 from typing import Any
 
 from sotto_soglia.animal_effects import (
+    Animal,
     ANIMAL_DISPLAY_NAMES,
     get_animal_for_color,
     get_display_color_for_technical_color,
@@ -288,6 +289,98 @@ def _rank_v05_balanced_candidates(
             -_color_order(card.color),
         )
         scored_candidates.append((card, comparison, consumption, points, sort_key))
+
+    return _rank_scored_v05_candidates(
+        player,
+        scored_candidates,
+        lowest_hand_comparison,
+        config,
+    )
+
+
+def _v05_animal_aware_adjustment(
+    player: PlayerState,
+    card: Card,
+    consumption: int,
+    config: GameConfig,
+) -> float:
+    """Return the v05_animal_aware score adjustment for one candidate."""
+
+    player_animal = get_animal_for_color(player.color)
+    card_animal = get_animal_for_color(card.color)
+    adjustment = 0.0
+
+    if card_animal == player_animal:
+        own_card_bonus = {
+            Animal.PANDA: 1.0,
+            Animal.CONIGLIO: 1.0,
+            Animal.SCIMMIA: 0.75,
+            Animal.SCOIATTOLO: 1.0,
+        }
+        adjustment += own_card_bonus[player_animal]
+
+    if player_animal == Animal.CONIGLIO and card.color == Color.RED:
+        if card.value == 2:
+            adjustment += 1.25
+        near_abandonment = player.critical_wounds >= config.critical_wounds_limit - 1
+        if near_abandonment and card.value in {1, 4}:
+            adjustment += 0.75
+
+    if player_animal != Animal.PANDA and card.color == Color.BLUE and card.value == 3:
+        adjustment -= 1.0
+
+    if (
+        player_animal == Animal.SCOIATTOLO
+        and card.color == Color.YELLOW
+        and card.value in {1, 3, 4}
+        and consumption < player.lives
+        and player.lives - consumption != 1
+    ):
+        adjustment += 0.5
+
+    return adjustment
+
+
+def _rank_v05_animal_aware_candidates(
+    player: PlayerState,
+    hand: list[Card],
+    game_state: dict[str, Any] | None,
+) -> list[_RankedStrategyCandidate]:
+    """Rank v05_animal_aware candidates from v05_balanced plus small animal-aware adjustments."""
+
+    config = _game_config(game_state)
+    balanced_candidates = _rank_v05_balanced_candidates(player, hand, game_state)
+    lowest_hand_comparison = min(
+        ranked.candidate.effective_comparison
+        for ranked in balanced_candidates
+    )
+
+    scored_candidates = []
+    for ranked in balanced_candidates:
+        candidate = ranked.candidate
+        adjustment = _v05_animal_aware_adjustment(
+            player,
+            ranked.card,
+            candidate.effective_consumption,
+            config,
+        )
+        points = candidate.score + adjustment
+        sort_key = (
+            points,
+            -candidate.effective_consumption,
+            candidate.effective_comparison,
+            -ranked.card.value,
+            -_color_order(ranked.card.color),
+        )
+        scored_candidates.append(
+            (
+                ranked.card,
+                candidate.effective_comparison,
+                candidate.effective_consumption,
+                points,
+                sort_key,
+            )
+        )
 
     return _rank_scored_v05_candidates(
         player,
@@ -664,6 +757,36 @@ class V05BalancedStrategy(BaseStrategy):
         ]
 
 
+class V05AnimalAwareStrategy(BaseStrategy):
+    """v0.5 balanced strategy with small animal-aware candidate adjustments."""
+
+    name = "v05_animal_aware"
+
+    def choose_card(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+        rng: Random,
+    ) -> Card:
+        """Choose a card using v05_balanced plus animal-aware adjustments."""
+
+        return _rank_v05_animal_aware_candidates(player, hand, game_state)[0].card
+
+    def evaluate_candidates(
+        self,
+        player: PlayerState,
+        hand: list[Card],
+        game_state: dict[str, Any] | None,
+    ) -> list[StrategyDecisionCandidate]:
+        """Return ranked scoring breakdown for v05_animal_aware candidate cards."""
+
+        return [
+            ranked.candidate
+            for ranked in _rank_v05_animal_aware_candidates(player, hand, game_state)
+        ]
+
+
 class AdaptivePressureStrategy(BaseStrategy):
     """Strategy that balances pressure, critical-wound risk and survival."""
 
@@ -871,6 +994,7 @@ AVAILABLE_STRATEGIES = {
     MixedStrategy.name: MixedStrategy,
     V05BasicStrategy.name: V05BasicStrategy,
     V05BalancedStrategy.name: V05BalancedStrategy,
+    V05AnimalAwareStrategy.name: V05AnimalAwareStrategy,
     AdaptivePressureStrategy.name: AdaptivePressureStrategy,
     CriticalAdaptiveStrategy.name: CriticalAdaptiveStrategy,
 }

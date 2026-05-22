@@ -118,6 +118,18 @@ def test_tournament_runner_works_with_two_players_and_two_strategies():
     assert "win_rate_by_strategy" in result.aggregate_stats
 
 
+def test_tournament_runner_accepts_v05_animal_aware_strategy():
+    result = StrategyTournamentRunner().run(
+        players_count=2,
+        strategy_names=["v05_animal_aware", "random"],
+        games_per_lineup=1,
+        seed=42,
+    )
+
+    assert result.lineups_tested == 2
+    assert "v05_animal_aware" in result.aggregate_stats["win_rate_by_strategy"]
+
+
 def test_tournament_does_not_duplicate_repeated_strategy_lineups():
     result = StrategyTournamentRunner().run(
         players_count=3,
