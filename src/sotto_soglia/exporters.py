@@ -148,6 +148,14 @@ def export_parametric_simulation_result(
                 "initial_lives": config_result.initial_lives,
                 "critical_wounds_limit": config_result.critical_wounds_limit,
                 "color_effects_enabled": config_result.color_effects_enabled,
+                "animal_card_effects_enabled": (
+                    config_result.animal_card_effects_enabled
+                ),
+                "critical_card_effects_enabled": (
+                    config_result.critical_card_effects_enabled
+                ),
+                "critical_deck_profile_id": config_result.critical_deck_profile_id,
+                "cards_per_player": config_result.cards_per_player,
                 "is_baseline": config_result.is_baseline,
                 "aggregate_stats": config_result.aggregate_stats,
             }
@@ -310,6 +318,10 @@ def write_parametric_summary_csv(
         "initial_lives",
         "critical_wounds_limit",
         "color_effects_enabled",
+        "animal_card_effects_enabled",
+        "critical_card_effects_enabled",
+        "critical_deck_profile_id",
+        "cards_per_player",
         "average_rounds",
         "min_rounds",
         "max_rounds",
@@ -338,6 +350,14 @@ def write_parametric_summary_csv(
                     "initial_lives": config_result.initial_lives,
                     "critical_wounds_limit": config_result.critical_wounds_limit,
                     "color_effects_enabled": config_result.color_effects_enabled,
+                    "animal_card_effects_enabled": (
+                        config_result.animal_card_effects_enabled
+                    ),
+                    "critical_card_effects_enabled": (
+                        config_result.critical_card_effects_enabled
+                    ),
+                    "critical_deck_profile_id": config_result.critical_deck_profile_id,
+                    "cards_per_player": config_result.cards_per_player,
                     "average_rounds": f"{stats['average_rounds']:.2f}",
                     "min_rounds": stats["min_rounds"],
                     "max_rounds": stats["max_rounds"],

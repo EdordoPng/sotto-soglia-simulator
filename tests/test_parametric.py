@@ -1,6 +1,7 @@
 import csv
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 
@@ -9,7 +10,8 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from sotto_soglia.config import GameConfig
+from sotto_soglia.config import GameConfig, get_v05_config_for_players
+from sotto_soglia.critical import V05_HUNGER_DECK_PROFILE_ID
 from sotto_soglia.exporters import CSV_DELIMITER, export_parametric_simulation_result
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.parametric import ParametricSimulationRunner
@@ -157,6 +159,57 @@ def test_parametric_runner_works_with_random_and_adaptive_pressure():
         assert result.config_results[0].aggregate_stats["games_count"] == 2
 
 
+def test_parametric_runner_preserves_v05_base_config():
+    base_config = get_v05_config_for_players(4)
+
+    result = ParametricSimulationRunner().run(
+        players_count=4,
+        games_per_config=1,
+        seed=42,
+        initial_lives_values=[20, 24],
+        critical_wounds_values=[4, 5],
+        color_effects_values=[False],
+        strategy_names="v05_animal_aware",
+        base_config=base_config,
+    )
+
+    tested_pairs = {
+        (config_result.initial_lives, config_result.critical_wounds_limit)
+        for config_result in result.config_results
+    }
+
+    assert tested_pairs == {(20, 4), (20, 5), (24, 4), (24, 5)}
+    for config_result in result.config_results:
+        simulation_result = config_result.simulation_result
+        assert config_result.color_effects_enabled is False
+        assert config_result.animal_card_effects_enabled is True
+        assert config_result.critical_card_effects_enabled is True
+        assert config_result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+        assert config_result.cards_per_player == 3
+        assert simulation_result.color_effects_enabled is False
+        assert simulation_result.animal_card_effects_enabled is True
+        assert simulation_result.critical_card_effects_enabled is True
+        assert simulation_result.critical_deck_profile_id == V05_HUNGER_DECK_PROFILE_ID
+        assert simulation_result.cards_per_player == 3
+
+
+def test_parametric_runner_without_base_config_keeps_legacy_defaults():
+    result = ParametricSimulationRunner().run(
+        players_count=2,
+        games_per_config=1,
+        seed=42,
+        initial_lives_values=[18],
+        critical_wounds_values=[3],
+        color_effects_values=[True],
+        strategy_names="random",
+    )
+
+    config_result = result.config_results[0]
+
+    assert config_result.animal_card_effects_enabled is False
+    assert config_result.critical_card_effects_enabled is False
+
+
 def test_parametric_export_creates_json_and_csv(tmp_path):
     result = ParametricSimulationRunner().run(
         players_count=2,
@@ -189,3 +242,82 @@ def test_parametric_export_creates_json_and_csv(tmp_path):
         rows = list(csv.DictReader(file, delimiter=CSV_DELIMITER))
 
     assert len(rows) == result.tested_configs
+
+
+def test_parametric_export_includes_v05_config_fields(tmp_path):
+    result = ParametricSimulationRunner().run(
+        players_count=4,
+        games_per_config=1,
+        seed=42,
+        initial_lives_values=[20],
+        critical_wounds_values=[4],
+        color_effects_values=[False],
+        strategy_names="v05_animal_aware",
+        base_config=get_v05_config_for_players(4),
+    )
+
+    exported_files = export_parametric_simulation_result(result, tmp_path)
+
+    with exported_files["parametric_stats"].open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    config_data = data["config_results"][0]
+    assert config_data["animal_card_effects_enabled"] is True
+    assert config_data["critical_card_effects_enabled"] is True
+    assert config_data["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+    assert config_data["cards_per_player"] == 3
+
+    with exported_files["parametric_summary"].open(
+        encoding="utf-8",
+        newline="",
+    ) as file:
+        row = next(csv.DictReader(file, delimiter=CSV_DELIMITER))
+
+    assert row["animal_card_effects_enabled"] == "True"
+    assert row["critical_card_effects_enabled"] == "True"
+    assert row["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+    assert row["cards_per_player"] == "3"
+
+
+def test_cli_parametric_preserves_v05_config_fields(tmp_path):
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "run_simulation.py"),
+        "--players",
+        "4",
+        "--games",
+        "1",
+        "--seed",
+        "42",
+        "--parametric",
+        "--strategy",
+        "v05_animal_aware",
+        "--lives-values",
+        "20",
+        "24",
+        "--critical-wounds-values",
+        "4",
+        "5",
+        "--color-effects",
+        "off",
+        "--animal-card-effects",
+        "on",
+        "--critical-card-effects",
+        "on",
+        "--export",
+        "--output-dir",
+        str(tmp_path),
+    ]
+
+    subprocess.run(command, check=True, capture_output=True, text=True)
+
+    with (tmp_path / "parametric_stats.json").open(encoding="utf-8") as file:
+        data = json.load(file)
+
+    assert data["tested_configs"] == 4
+    for config_data in data["config_results"]:
+        assert config_data["color_effects_enabled"] is False
+        assert config_data["animal_card_effects_enabled"] is True
+        assert config_data["critical_card_effects_enabled"] is True
+        assert config_data["critical_deck_profile_id"] == V05_HUNGER_DECK_PROFILE_ID
+        assert config_data["cards_per_player"] == 3

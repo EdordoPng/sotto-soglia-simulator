@@ -1,7 +1,7 @@
 """Parametric simulation runner for balance testing."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sotto_soglia.config import GameConfig
 from sotto_soglia.simulation import SimulationResult, SimulationRunner
@@ -24,6 +24,10 @@ class ParametricConfigResult:
     initial_lives: int
     critical_wounds_limit: int
     color_effects_enabled: bool
+    animal_card_effects_enabled: bool
+    critical_card_effects_enabled: bool
+    critical_deck_profile_id: str
+    cards_per_player: int
     simulation_result: SimulationResult
     aggregate_stats: dict
     is_baseline: bool = False
@@ -58,6 +62,7 @@ class ParametricSimulationRunner:
         critical_deck_seed: int | None = None,
         critical_deck_order: tuple[str, ...] | None = None,
         sono_ancora_qui_variant: str = "single_2",
+        base_config: GameConfig | None = None,
     ) -> ParametricSimulationResult:
         """Run one simulation batch per configuration."""
 
@@ -82,6 +87,7 @@ class ParametricSimulationRunner:
                 critical_deck_seed,
                 critical_deck_order,
                 sono_ancora_qui_variant,
+                base_config,
             )
         ):
             config_seed = seed + config_index * games_per_config
@@ -100,6 +106,10 @@ class ParametricSimulationRunner:
                     initial_lives=config.initial_lives,
                     critical_wounds_limit=config.critical_wounds_limit,
                     color_effects_enabled=config.color_effects_enabled,
+                    animal_card_effects_enabled=config.animal_card_effects_enabled,
+                    critical_card_effects_enabled=config.critical_card_effects_enabled,
+                    critical_deck_profile_id=config.critical_deck_profile_id,
+                    cards_per_player=config.cards_per_player,
                     simulation_result=simulation_result,
                     aggregate_stats=simulation_result.aggregate_stats,
                     is_baseline=self._is_baseline(config),
@@ -125,18 +135,23 @@ class ParametricSimulationRunner:
         critical_deck_seed: int | None = None,
         critical_deck_order: tuple[str, ...] | None = None,
         sono_ancora_qui_variant: str = "single_2",
+        base_config: GameConfig | None = None,
     ) -> list[GameConfig]:
         """Build configs in a stable nested-loop order."""
 
+        config_template = base_config or GameConfig(
+            critical_card_effects_enabled=critical_card_effects_enabled,
+            critical_deck_seed=critical_deck_seed,
+            critical_deck_order=critical_deck_order,
+            sono_ancora_qui_variant=sono_ancora_qui_variant,
+        )
+
         return [
-            GameConfig(
+            replace(
+                config_template,
                 initial_lives=initial_lives,
                 critical_wounds_limit=critical_wounds_limit,
                 color_effects_enabled=color_effects_enabled,
-                critical_card_effects_enabled=critical_card_effects_enabled,
-                critical_deck_seed=critical_deck_seed,
-                critical_deck_order=critical_deck_order,
-                sono_ancora_qui_variant=sono_ancora_qui_variant,
             )
             for initial_lives in initial_lives_values
             for critical_wounds_limit in critical_wounds_values

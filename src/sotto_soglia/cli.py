@@ -426,6 +426,7 @@ def main() -> None:
                 critical_deck_seed=critical_config.critical_deck_seed,
                 critical_deck_order=critical_config.critical_deck_order,
                 sono_ancora_qui_variant=critical_config.sono_ancora_qui_variant,
+                base_config=critical_config,
             )
         except ValueError as error:
             parser.error(str(error))
