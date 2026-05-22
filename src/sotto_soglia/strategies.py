@@ -324,19 +324,10 @@ def _v05_animal_aware_adjustment(
             adjustment += 1.25
         near_abandonment = player.critical_wounds >= config.critical_wounds_limit - 1
         if near_abandonment and card.value in {1, 4}:
-            adjustment += 0.75
+            adjustment += 1.25
 
     if player_animal != Animal.PANDA and card.color == Color.BLUE and card.value == 3:
         adjustment -= 1.0
-
-    if (
-        player_animal == Animal.SCOIATTOLO
-        and card.color == Color.YELLOW
-        and card.value in {1, 3, 4}
-        and consumption < player.lives
-        and player.lives - consumption != 1
-    ):
-        adjustment += 0.5
 
     return adjustment
 

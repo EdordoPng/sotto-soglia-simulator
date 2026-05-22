@@ -53,6 +53,14 @@ def _card_tuple(card):
     )
 
 
+def _candidate_by_card(candidates, card):
+    return next(
+        candidate
+        for candidate in candidates
+        if _candidate_card_tuple(candidate) == _card_tuple(card)
+    )
+
+
 def _assert_single_chosen_with_consecutive_ranks(candidates):
     chosen = [candidate for candidate in candidates if candidate.chosen]
 
@@ -1014,6 +1022,86 @@ def test_v05_animal_aware_improves_coniglio_red_2_ranking():
     assert animal_aware_red_2.chosen
 
 
+def test_v05_animal_aware_boosts_coniglio_red_1_near_abandonment():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        critical_wounds=config.critical_wounds_limit - 1,
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_1 = Card(Color.RED, 1)
+    hand = [red_1, Card(Color.BLUE, 3)]
+    game_state = _v05_game_state(player, opponent, config=config)
+
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        red_1,
+    )
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        red_1,
+    )
+
+    assert animal_aware.score > balanced.score
+    assert animal_aware.score - balanced.score == 2.25
+    assert "near_abandonment" in animal_aware.reason_flags
+
+
+def test_v05_animal_aware_boosts_coniglio_red_4_near_abandonment():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        critical_wounds=config.critical_wounds_limit - 1,
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_4 = Card(Color.RED, 4)
+    hand = [red_4, Card(Color.BLUE, 3, custom_consumption_value=2)]
+    game_state = _v05_game_state(player, opponent, config=config)
+
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        red_4,
+    )
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        red_4,
+    )
+
+    assert animal_aware.choice_rank == 1
+    assert animal_aware.score > balanced.score
+    assert animal_aware.score - balanced.score == 2.25
+    assert "near_abandonment" in animal_aware.reason_flags
+
+
+def test_v05_animal_aware_does_not_add_near_abandonment_bonus_to_coniglio_red_2():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        critical_wounds=config.critical_wounds_limit - 1,
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_2 = Card(Color.RED, 2)
+    hand = [red_2, Card(Color.BLUE, 3, custom_consumption_value=2)]
+    game_state = _v05_game_state(player, opponent, config=config)
+
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        red_2,
+    )
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        red_2,
+    )
+
+    assert animal_aware.score - balanced.score == 2.25
+
+
 def test_v05_animal_aware_non_panda_blue_3_does_not_beat_close_good_own_card():
     player = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
     opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
@@ -1077,6 +1165,26 @@ def test_v05_animal_aware_scoiattolo_preparation_bonus_does_not_override_lethal_
     )
 
     assert selected == survivable
+
+
+def test_v05_animal_aware_scoiattolo_preparation_keeps_only_own_card_bonus():
+    player = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    preparation = Card(Color.YELLOW, 3)
+    hand = [preparation, Card(Color.GREEN, 3)]
+    game_state = _v05_game_state(player, opponent)
+
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        preparation,
+    )
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        preparation,
+    )
+
+    assert animal_aware.score - balanced.score == 1.0
+    assert animal_aware.chosen
 
 
 def test_simulation_runner_smoke_with_v05_animal_aware_strategy():
