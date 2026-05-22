@@ -532,14 +532,15 @@ def test_piccola_riserva_can_recover_from_zero_before_lives_elimination():
 
 
 def test_existing_scimmia_effects_still_work():
-    players = [
-        PlayerState(player_id=1, color=Color.GREEN, lives=12),
-        PlayerState(player_id=2, color=Color.BLUE, lives=12),
-        PlayerState(player_id=3, color=Color.RED, lives=12),
-    ]
+    def make_players():
+        return [
+            PlayerState(player_id=1, color=Color.GREEN, lives=12),
+            PlayerState(player_id=2, color=Color.BLUE, lives=12),
+            PlayerState(player_id=3, color=Color.RED, lives=12),
+        ]
 
     finta = resolve_round(
-        players,
+        make_players(),
         {
             1: Card(Color.GREEN, 1),
             2: Card(Color.BLUE, 1),
@@ -550,7 +551,7 @@ def test_existing_scimmia_effects_still_work():
     assert finta.critical_wound_players == [2]
 
     buccia = resolve_round(
-        players,
+        make_players(),
         {
             1: Card(Color.GREEN, 2),
             2: Card(Color.BLUE, 3),
@@ -561,11 +562,11 @@ def test_existing_scimmia_effects_still_work():
     assert buccia.critical_wound_players == [1, 2]
 
     banana = resolve_round(
-        players,
+        make_players(),
         {
             1: Card(Color.GREEN, 5),
             2: Card(Color.BLUE, 1),
-            3: Card(Color.RED, 4),
+            3: Card(Color.BLUE, 4),
         },
         _animal_config(),
     )

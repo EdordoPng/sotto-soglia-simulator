@@ -907,6 +907,21 @@ def test_animal_effect_events_csv_exports_k2_and_k6_effects(tmp_path):
             reason="current_round_free",
         ),
         AnimalEffectEvent(
+            player_id=2,
+            animal="Coniglio",
+            card_color="RED",
+            card_value=4,
+            effect_id=CONIGLIO_GRANDE_BALZO,
+            effect_name="Grande Balzo",
+            timing="consumption",
+            status="applied",
+            value_before=4,
+            value_after=12,
+            amount=8,
+            actual_amount=12,
+            reason="triple_debt_applied",
+        ),
+        AnimalEffectEvent(
             player_id=1,
             animal="Panda",
             card_color="BLUE",
@@ -966,6 +981,16 @@ def test_animal_effect_events_csv_exports_k2_and_k6_effects(tmp_path):
         SCOIATTOLO_GHIANDA_NASCOSTA,
         SCOIATTOLO_PICCOLA_RISERVA,
     }
+    debt_rows = [
+        row
+        for row in rows
+        if row["effect_id"] == CONIGLIO_GRANDE_BALZO
+        and row["reason"] == "triple_debt_applied"
+    ]
+    assert len(debt_rows) == 1
+    assert debt_rows[0]["value_before"] == "4"
+    assert debt_rows[0]["value_after"] == "12"
+    assert debt_rows[0]["actual_amount"] == "12"
 
 
 def test_animal_effect_events_csv_exports_card_display_color_for_technical_colors(

@@ -480,6 +480,83 @@ def test_grande_balzo_debt_next_round_consumption_four_pays_twelve():
     assert players[0].lives == 3
 
 
+def test_grande_balzo_debt_next_round_red_four_pays_twelve_and_schedules_new_debt():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=15,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.RED, 4),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(initial_lives=15),
+    )
+
+    assert result.base_damage_by_player[1] == 12
+    assert players[0].lives == 3
+    assert players[0].active_animal_effects == [CONIGLIO_GRANDE_BALZO_DEBT]
+    balzo_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == CONIGLIO_GRANDE_BALZO
+    ]
+    assert any(
+        event.timing == "consumption"
+        and event.status == "applied"
+        and event.value_before == 4
+        and event.value_after == 12
+        and event.reason == "triple_debt_applied"
+        for event in balzo_events
+    )
+    assert sum(
+        event.reason == "triple_debt_applied"
+        for event in balzo_events
+    ) == 1
+    assert any(
+        event.timing == "next_round_schedule"
+        and event.status == "scheduled"
+        and event.reason == "triple_next_consumption"
+        for event in balzo_events
+    )
+    assert not any(
+        event.reason == "triple_debt_applied"
+        and event.value_after == 0
+        for event in balzo_events
+    )
+
+
+def test_grande_balzo_debt_next_round_consumption_five_pays_fifteen():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=16,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 5),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(initial_lives=16),
+    )
+
+    assert result.base_damage_by_player[1] == 15
+    assert players[0].lives == 1
+
+
 def test_grande_balzo_debt_applies_even_when_coniglio_receives_affamato():
     players = [
         PlayerState(
@@ -503,6 +580,14 @@ def test_grande_balzo_debt_applies_even_when_coniglio_receives_affamato():
     assert result.critical_wound_players == [1]
     assert result.base_damage_by_player[1] == 6
     assert players[0].lives == 6
+    assert players[0].active_animal_effects == []
+    assert any(
+        event.effect_id == CONIGLIO_GRANDE_BALZO
+        and event.reason == "triple_debt_applied"
+        and event.value_before == 2
+        and event.value_after == 6
+        for event in result.animal_events
+    )
 
 
 def test_grande_balzo_debt_logs_apply_and_consume_events():

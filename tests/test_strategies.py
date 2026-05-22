@@ -1140,6 +1140,50 @@ def test_v05_animal_aware_with_grande_balzo_debt_prefers_low_consumption_card():
     assert high_candidate.chosen is False
 
 
+def test_v05_animal_aware_with_grande_balzo_debt_values_red_four_as_twelve():
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_four = Card(Color.RED, 4)
+
+    candidate = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(
+            player,
+            [red_four, Card(Color.RED, 1)],
+            _v05_game_state(player, opponent),
+        ),
+        red_four,
+    )
+
+    assert candidate.effective_consumption == 12
+
+
+def test_v05_animal_aware_with_grande_balzo_debt_values_red_two_as_six():
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_two = Card(Color.RED, 2)
+
+    candidate = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(
+            player,
+            [red_two, Card(Color.RED, 1)],
+            _v05_game_state(player, opponent),
+        ),
+        red_two,
+    )
+
+    assert candidate.effective_consumption == 6
+
+
 def test_v05_basic_and_balanced_do_not_apply_grande_balzo_debt_strategy_consumption():
     player = PlayerState(
         player_id=1,

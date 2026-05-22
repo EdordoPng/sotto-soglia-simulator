@@ -1443,7 +1443,12 @@ def _calculate_base_damage_with_critical_effects(
         reason=consumption_reason,
     )
     if has_grande_balzo_debt:
-        debt_before = damage
+        debt_before = _grande_balzo_debt_consumption_basis(
+            player=player,
+            card=card,
+            config=config,
+            received_critical_wound=received_critical_wound,
+        )
         damage = apply_coniglio_grande_balzo_debt(debt_before)
         animal_events.append(
             _animal_event(
@@ -1525,6 +1530,22 @@ def _normal_effective_consumption_for_round(
         consumption = 1
     elif effect_id == CONIGLIO_GRANDE_BALZO:
         consumption = 0
+
+    return max(0, consumption)
+
+
+def _grande_balzo_debt_consumption_basis(
+    player: PlayerState,
+    card: Card,
+    config: GameConfig,
+    received_critical_wound: bool,
+) -> int:
+    """Return the card consumption that Grande Balzo debt must triple."""
+
+    effect_id = get_active_own_animal_effect_id(player, card, config)
+    consumption = card.consumption_value
+    if effect_id == CONIGLIO_PASSO_LEGGERO and not received_critical_wound:
+        consumption = 1
 
     return max(0, consumption)
 
