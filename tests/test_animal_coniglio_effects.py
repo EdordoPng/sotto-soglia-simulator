@@ -12,6 +12,7 @@ from sotto_soglia.config import GameConfig, get_v05_config_for_players
 from sotto_soglia.critical import BRICIOLA_NASCOSTA, V05_HUNGER_DECK_PROFILE_ID
 from sotto_soglia.animal_effects import (
     CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_GRANDE_BALZO_DEBT,
     CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
 )
@@ -24,13 +25,14 @@ from sotto_soglia.rules import (
 
 
 def _animal_config(**overrides) -> GameConfig:
-    return GameConfig(
+    defaults = dict(
         initial_lives=12,
         critical_wounds_limit=5,
         color_effects_enabled=False,
         animal_card_effects_enabled=True,
-        **overrides,
     )
+    defaults.update(overrides)
+    return GameConfig(**defaults)
 
 
 def test_game_config_disables_animal_card_effects_by_default():
@@ -96,14 +98,14 @@ def test_passo_leggero_is_inactive_when_other_animal_plays_coniglio_two():
         assert get_effective_consumption_value(player, card, _animal_config()) == 2
 
 
-def test_grande_balzo_sets_own_coniglio_four_effective_comparison_to_five():
+def test_grande_balzo_keeps_own_coniglio_four_effective_comparison_at_four():
     player = PlayerState(player_id=1, color=Color.RED, lives=12)
     card = Card(Color.RED, 4)
 
     assert card.value == 4
     assert card.consumption_value == 4
     assert card.comparison_value == 4
-    assert get_effective_comparison_value(player, card, _animal_config()) == 5
+    assert get_effective_comparison_value(player, card, _animal_config()) == 4
 
 
 def test_grande_balzo_is_inactive_when_animal_effects_are_disabled():
@@ -204,7 +206,7 @@ def test_round_does_not_log_scatto_improvviso_when_animals_disabled():
     assert result.animal_events == []
 
 
-def test_round_passo_leggero_stays_two_when_coniglio_is_only_printed_two():
+def test_round_passo_leggero_reduces_consumption_when_coniglio_gets_no_affamato():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -218,15 +220,25 @@ def test_round_passo_leggero_stays_two_when_coniglio_is_only_printed_two():
 
     assert result.critical_wound_players == [1]
     assert result.lowest_value == 1
-    assert result.base_damage_by_player[2] == 2
-    assert players[1].lives == 10
-    assert not any(
-        event.effect_id == CONIGLIO_PASSO_LEGGERO
+    assert result.base_damage_by_player[2] == 1
+    assert players[1].lives == 11
+    passo_events = [
+        event
         for event in result.animal_events
-    )
+        if event.effect_id == CONIGLIO_PASSO_LEGGERO
+    ]
+    assert len(passo_events) == 1
+    event = passo_events[0]
+    assert event.timing == "consumption"
+    assert event.status == "applied"
+    assert event.value_before == 2
+    assert event.value_after == 1
+    assert event.amount == 1
+    assert event.actual_amount == 1
+    assert event.reason == "no_affamato"
 
 
-def test_round_passo_leggero_shared_printed_two_sets_comparison_and_consumption_to_three():
+def test_round_passo_leggero_shared_printed_two_no_longer_sets_three_three():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -239,25 +251,19 @@ def test_round_passo_leggero_shared_printed_two_sets_comparison_and_consumption_
     result = resolve_round(players, selected_cards, _animal_config())
 
     assert result.lowest_value == 2
-    assert result.critical_wound_players == [1]
-    assert result.base_damage_by_player[2] == 3
-    assert players[1].lives == 9
+    assert result.critical_wound_players == [1, 2]
+    assert result.base_damage_by_player[2] == 0
+    assert players[1].lives == 12
 
     passo_events = [
         event
         for event in result.animal_events
         if event.effect_id == CONIGLIO_PASSO_LEGGERO
     ]
-    assert {
-        (event.timing, event.value_before, event.value_after, event.reason)
-        for event in passo_events
-    } == {
-        ("comparison", 2, 3, "shared_printed_2"),
-        ("consumption", 2, 3, "shared_printed_2"),
-    }
+    assert passo_events == []
 
 
-def test_round_passo_leggero_counts_other_printed_two_even_if_effective_value_differs():
+def test_round_passo_leggero_ignores_other_printed_two_even_if_effective_value_differs():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -269,16 +275,11 @@ def test_round_passo_leggero_counts_other_printed_two_even_if_effective_value_di
 
     result = resolve_round(players, selected_cards, _animal_config())
 
-    assert result.lowest_value == 3
+    assert result.lowest_value == 2
     assert result.critical_wound_players == [2]
     assert result.base_damage_by_player[2] == 0
     assert players[1].lives == 12
-    assert any(
-        event.effect_id == CONIGLIO_PASSO_LEGGERO
-        and event.timing == "comparison"
-        and event.value_after == 3
-        for event in result.animal_events
-    )
+    assert not any(event.effect_id == CONIGLIO_PASSO_LEGGERO for event in result.animal_events)
 
 
 def test_round_base_consumption_keeps_coniglio_two_standard_when_animals_disabled():
@@ -315,7 +316,7 @@ def test_round_base_consumption_keeps_coniglio_two_standard_for_other_animal():
     assert players[0].lives == 10
 
 
-def test_passo_leggero_shared_printed_two_affamato_coniglio_still_consumes_zero():
+def test_passo_leggero_affamato_coniglio_consumes_zero_without_shared_printed_event():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -330,20 +331,13 @@ def test_passo_leggero_shared_printed_two_affamato_coniglio_still_consumes_zero(
     assert result.critical_wound_players == [2]
     assert result.base_damage_by_player[2] == 0
     assert players[1].lives == 12
-    assert any(
-        event.effect_id == CONIGLIO_PASSO_LEGGERO
-        and event.timing == "comparison"
-        and event.value_after == 3
-        for event in result.animal_events
-    )
     assert not any(
         event.effect_id == CONIGLIO_PASSO_LEGGERO
-        and event.timing == "consumption"
         for event in result.animal_events
     )
 
 
-def test_round_affamato_uses_grande_balzo_effective_comparison_value():
+def test_round_grande_balzo_keeps_comparison_four_and_schedules_debt():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -356,12 +350,14 @@ def test_round_affamato_uses_grande_balzo_effective_comparison_value():
     result = resolve_round(players, selected_cards, _animal_config())
 
     assert result.lowest_value == 4
-    assert result.critical_wound_players == [1]
+    assert result.critical_wound_players == [1, 2]
     assert players[0].critical_wounds == 1
-    assert players[1].critical_wounds == 0
+    assert players[1].critical_wounds == 1
+    assert players[1].active_animal_effects == [CONIGLIO_GRANDE_BALZO_DEBT]
+    assert result.base_damage_by_player[2] == 0
 
 
-def test_round_logs_grande_balzo_comparison_animal_event():
+def test_round_logs_grande_balzo_current_free_and_schedule_events():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -378,17 +374,169 @@ def test_round_logs_grande_balzo_comparison_animal_event():
         for event in result.animal_events
         if event.effect_id == CONIGLIO_GRANDE_BALZO
     ]
-    assert len(balzo_events) == 1
-    event = balzo_events[0]
-    assert event.effect_id == CONIGLIO_GRANDE_BALZO
-    assert event.effect_name == "Grande Balzo"
-    assert event.timing == "comparison"
-    assert event.status == "applied"
-    assert event.player_id == 2
-    assert event.card_color == "RED"
-    assert event.card_value == 4
-    assert event.value_before == 4
-    assert event.value_after == 5
+    assert {
+        (event.timing, event.status, event.value_before, event.value_after, event.reason)
+        for event in balzo_events
+    } == {
+        ("consumption", "applied", 4, 0, "current_round_free"),
+        ("next_round_schedule", "scheduled", None, None, "triple_next_consumption"),
+    }
+
+
+def test_grande_balzo_debt_next_round_consumption_one_pays_three():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=12,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.RED, 1),
+            2: Card(Color.BLUE, 5),
+        },
+        _animal_config(),
+    )
+
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 9
+    assert players[0].active_animal_effects == []
+
+
+def test_grande_balzo_debt_next_round_red_two_uses_passo_leggero_then_pays_three():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=12,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.RED, 2),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 9
+
+
+def test_grande_balzo_debt_next_round_plain_consumption_two_pays_six():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=12,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.BLUE, 2),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(),
+    )
+
+    assert result.base_damage_by_player[1] == 6
+    assert players[0].lives == 6
+
+
+def test_grande_balzo_debt_next_round_consumption_four_pays_twelve():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=15,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.GREEN, 4),
+            2: Card(Color.BLUE, 1),
+        },
+        _animal_config(initial_lives=15),
+    )
+
+    assert result.base_damage_by_player[1] == 12
+    assert players[0].lives == 3
+
+
+def test_grande_balzo_debt_applies_even_when_coniglio_receives_affamato():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=12,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.RED, 2),
+            2: Card(Color.BLUE, 5),
+        },
+        _animal_config(),
+    )
+
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[1] == 6
+    assert players[0].lives == 6
+
+
+def test_grande_balzo_debt_logs_apply_and_consume_events():
+    players = [
+        PlayerState(
+            player_id=1,
+            color=Color.RED,
+            lives=12,
+            active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+        ),
+        PlayerState(player_id=2, color=Color.BLUE, lives=12),
+    ]
+
+    result = resolve_round(
+        players,
+        {
+            1: Card(Color.RED, 1),
+            2: Card(Color.BLUE, 5),
+        },
+        _animal_config(),
+    )
+
+    balzo_events = [
+        event
+        for event in result.animal_events
+        if event.effect_id == CONIGLIO_GRANDE_BALZO
+    ]
+    assert {
+        (event.timing, event.status, event.value_before, event.value_after, event.reason)
+        for event in balzo_events
+    } == {
+        ("consumption", "applied", 1, 3, "triple_debt_applied"),
+        ("next_round_consume", "consumed", None, None, "triple_debt_consumed"),
+    }
 
 
 def test_round_ties_coniglio_four_when_animal_effects_are_disabled():

@@ -6,7 +6,7 @@ The full game rules will be implemented incrementally in later phases.
 from collections.abc import Iterable, Mapping
 
 from sotto_soglia.animal_effects import (
-    CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_GRANDE_BALZO_DEBT,
     CONIGLIO_SCATTO_IMPROVVISO,
     PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
@@ -82,9 +82,6 @@ def get_effective_comparison_value(
     if effect_id == CONIGLIO_SCATTO_IMPROVVISO:
         return 2
 
-    if effect_id == CONIGLIO_GRANDE_BALZO:
-        return 5
-
     return card.comparison_value
 
 
@@ -97,10 +94,26 @@ def get_effective_consumption_value(
 
     effect_id = get_active_own_animal_effect_id(player, card, config)
     consumption = card.consumption_value
-    if effect_id == PANDA_RESPIRO_LENTO:
+    if effect_id == PANDA_RESPIRO_LENTO and player.critical_wounds >= 2:
         consumption -= 1
 
     return max(1, consumption)
+
+
+def has_coniglio_grande_balzo_debt(player: PlayerState, config: GameConfig) -> bool:
+    """Return whether the Rabbit triple-consumption debt is active."""
+
+    return (
+        config.animal_card_effects_enabled
+        and player.color.name == "RED"
+        and CONIGLIO_GRANDE_BALZO_DEBT in player.active_animal_effects
+    )
+
+
+def apply_coniglio_grande_balzo_debt(consumption: int) -> int:
+    """Return total consumption owed by Grande Balzo debt."""
+
+    return consumption * 3
 
 
 def find_lowest_effective_value_players(

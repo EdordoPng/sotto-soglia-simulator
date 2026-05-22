@@ -10,6 +10,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from sotto_soglia.config import GameConfig, get_v05_config_for_players
+from sotto_soglia.animal_effects import CONIGLIO_GRANDE_BALZO_DEBT
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.simulation import SimulationRunner
 from sotto_soglia.strategies import (
@@ -1104,6 +1105,63 @@ def test_v05_animal_aware_non_panda_blue_3_has_no_special_penalty():
     )
 
     assert animal_aware.score == balanced.score
+
+
+def test_v05_animal_aware_with_grande_balzo_debt_prefers_low_consumption_card():
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    low_consumption = Card(Color.RED, 1)
+    high_consumption = Card(Color.RED, 4)
+    game_state = _v05_game_state(player, opponent)
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        [high_consumption, low_consumption],
+        game_state,
+        Random(1),
+    )
+    candidates = V05AnimalAwareStrategy().evaluate_candidates(
+        player,
+        [high_consumption, low_consumption],
+        game_state,
+    )
+
+    assert selected == low_consumption
+    low_candidate = _candidate_by_card(candidates, low_consumption)
+    high_candidate = _candidate_by_card(candidates, high_consumption)
+    assert low_candidate.effective_consumption == 3
+    assert high_candidate.effective_consumption == 12
+    assert low_candidate.chosen is True
+    assert high_candidate.chosen is False
+
+
+def test_v05_basic_and_balanced_do_not_apply_grande_balzo_debt_strategy_consumption():
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=12,
+        active_animal_effects=[CONIGLIO_GRANDE_BALZO_DEBT],
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    red_4 = Card(Color.RED, 4)
+    game_state = _v05_game_state(player, opponent)
+
+    basic = _candidate_by_card(
+        V05BasicStrategy().evaluate_candidates(player, [red_4], game_state),
+        red_4,
+    )
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, [red_4], game_state),
+        red_4,
+    )
+
+    assert basic.effective_consumption == 4
+    assert balanced.effective_consumption == 4
 
 
 def test_v05_animal_aware_panda_can_still_choose_blue_3_when_sensible():

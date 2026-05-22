@@ -589,6 +589,16 @@ def test_existing_panda_effects_still_work():
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         Card(Color.BLUE, 3),
         _animal_config(),
+    ) == 3
+    assert get_effective_consumption_value(
+        PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=1),
+        Card(Color.BLUE, 3),
+        _animal_config(),
+    ) == 3
+    assert get_effective_consumption_value(
+        PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=2),
+        Card(Color.BLUE, 3),
+        _animal_config(),
     ) == 2
     assert get_effective_comparison_value(
         PlayerState(
@@ -619,7 +629,7 @@ def test_existing_coniglio_effects_still_work():
         coniglio,
         Card(Color.RED, 4),
         _animal_config(),
-    ) == 5
+    ) == 4
 
 
 def test_dispensa_ordinata_registers_next_round_when_not_affamato():

@@ -311,7 +311,7 @@ def test_buccia_di_banana_respiro_calmo_blocks_reduction_without_retargeting():
         {
             1: Card(Color.GREEN, 2),
             2: Card(Color.BLUE, 2),
-            3: Card(Color.RED, 2),
+            3: Card(Color.RED, 3),
         },
         config,
     )
@@ -1105,7 +1105,7 @@ def test_coniglio_effects_continue_to_work_with_scimmia_effects_enabled():
         coniglio,
         Card(Color.RED, 4),
         _animal_config(),
-    ) == 5
+    ) == 4
 
 
 def test_panda_effects_continue_to_work_with_scimmia_effects_enabled():
@@ -1119,6 +1119,16 @@ def test_panda_effects_continue_to_work_with_scimmia_effects_enabled():
 
     assert get_effective_consumption_value(
         panda,
+        Card(Color.BLUE, 3),
+        _animal_config(),
+    ) == 3
+    assert get_effective_consumption_value(
+        PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=1),
+        Card(Color.BLUE, 3),
+        _animal_config(),
+    ) == 3
+    assert get_effective_consumption_value(
+        PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=2),
         Card(Color.BLUE, 3),
         _animal_config(),
     ) == 2

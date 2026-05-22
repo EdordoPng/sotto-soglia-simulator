@@ -8,6 +8,7 @@ from sotto_soglia.animal_effects import (
     ANIMAL_DISPLAY_NAMES,
     AnimalEffectEvent,
     CONIGLIO_GRANDE_BALZO,
+    CONIGLIO_GRANDE_BALZO_DEBT,
     CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
     PANDA_GRANDE_LETARGO,
@@ -47,11 +48,13 @@ from sotto_soglia.models import Card
 from sotto_soglia.models import PlayerState
 from sotto_soglia.rules import (
     apply_comparison_value_modifier,
+    apply_coniglio_grande_balzo_debt,
     apply_life_loss,
     choose_comparison_value_target,
     get_active_own_animal_effect_id,
     get_effective_comparison_value,
     get_effective_consumption_value,
+    has_coniglio_grande_balzo_debt,
     resolve_eliminations,
     valid_comparison_value_targets,
 )
@@ -182,13 +185,6 @@ def resolve_round(
         config,
         effective_comparison_values,
     )
-    _apply_passo_leggero_shared_two_comparison(
-        player_map,
-        selected_cards,
-        config,
-        effective_comparison_values,
-        animal_events,
-    )
     _apply_animal_comparison_effects(
         player_map,
         selected_cards,
@@ -281,6 +277,7 @@ def resolve_round(
             animal_events=animal_events,
             selected_cards=selected_cards,
             player_map=player_map,
+            active_animal_effects=active_animal_effects_by_player.get(player_id, []),
         )
         for player_id, card in selected_cards.items()
     }
@@ -571,7 +568,6 @@ def _collect_comparison_animal_events(
     animal_events: list[AnimalEffectEvent] = []
     comparison_effect_names = {
         CONIGLIO_SCATTO_IMPROVVISO: "Scatto Improvviso",
-        CONIGLIO_GRANDE_BALZO: "Grande Balzo",
     }
     for player_id, card in selected_cards.items():
         player = player_map[player_id]
@@ -639,6 +635,8 @@ def _collect_consumption_animal_event(
                 status="applied",
                 value_before=value_before,
                 value_after=value_after,
+                amount=value_before - value_after,
+                actual_amount=value_before - value_after,
                 reason=reason,
             )
         )
@@ -654,55 +652,8 @@ def _collect_consumption_animal_event(
                 value_before=value_before,
                 value_after=value_after,
                 amount=1,
-            )
-        )
-
-
-def _has_other_live_printed_two(
-    player_id: int,
-    player_map: Mapping[int, PlayerState],
-    selected_cards: Mapping[int, Card],
-) -> bool:
-    """Return whether another live player revealed a printed 2 this round."""
-
-    return any(
-        other_player_id != player_id
-        and player_map[other_player_id].is_alive
-        and other_card.value == 2
-        for other_player_id, other_card in selected_cards.items()
-    )
-
-
-def _apply_passo_leggero_shared_two_comparison(
-    player_map: Mapping[int, PlayerState],
-    selected_cards: Mapping[int, Card],
-    config: GameConfig,
-    effective_comparison_values: dict[int, int],
-    animal_events: list[AnimalEffectEvent],
-) -> None:
-    """Apply Passo Leggero's shared printed-2 comparison effect."""
-
-    for player_id, card in selected_cards.items():
-        player = player_map[player_id]
-        effect_id = get_active_own_animal_effect_id(player, card, config)
-        if effect_id != CONIGLIO_PASSO_LEGGERO:
-            continue
-        if not _has_other_live_printed_two(player_id, player_map, selected_cards):
-            continue
-
-        value_before = effective_comparison_values[player_id]
-        effective_comparison_values[player_id] = 3
-        animal_events.append(
-            _animal_event(
-                player=player,
-                card=card,
-                effect_id=CONIGLIO_PASSO_LEGGERO,
-                effect_name="Passo Leggero",
-                timing="comparison",
-                status="applied",
-                value_before=value_before,
-                value_after=3,
-                reason="shared_printed_2",
+                actual_amount=1,
+                reason=reason,
             )
         )
 
@@ -899,6 +850,35 @@ def _schedule_next_round_animal_effects(
                     effect_name="Grande Letargo",
                     timing="next_round_schedule",
                     status="scheduled",
+                )
+            )
+        elif effect_id == CONIGLIO_GRANDE_BALZO:
+            player.active_animal_effects.append(CONIGLIO_GRANDE_BALZO_DEBT)
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=CONIGLIO_GRANDE_BALZO,
+                    effect_name="Grande Balzo",
+                    timing="consumption",
+                    status="applied",
+                    value_before=4,
+                    value_after=0,
+                    amount=4,
+                    actual_amount=4,
+                    reason="current_round_free",
+                )
+            )
+            animal_events.append(
+                _animal_event(
+                    player=player,
+                    card=card,
+                    effect_id=CONIGLIO_GRANDE_BALZO,
+                    effect_name="Grande Balzo",
+                    timing="next_round_schedule",
+                    status="scheduled",
+                    amount=3,
+                    reason="triple_next_consumption",
                 )
             )
         elif effect_id == SCOIATTOLO_GHIANDA_NASCOSTA:
@@ -1413,10 +1393,17 @@ def _calculate_base_damage_with_critical_effects(
     animal_events: list[AnimalEffectEvent],
     selected_cards: Mapping[int, Card],
     player_map: Mapping[int, PlayerState],
+    active_animal_effects: list[str] | None = None,
 ) -> int:
     """Calculate base damage with supported next-round critical effects."""
 
-    if received_critical_wound:
+    active_animal_effects = active_animal_effects or []
+    has_grande_balzo_debt = (
+        CONIGLIO_GRANDE_BALZO_DEBT in active_animal_effects
+        and has_coniglio_grande_balzo_debt(player, config)
+    )
+
+    if received_critical_wound and not has_grande_balzo_debt:
         if RAZIONE_RISPARMIATA in active_effects:
             critical_events.append(
                 _effect_event(
@@ -1430,15 +1417,22 @@ def _calculate_base_damage_with_critical_effects(
         return 0
 
     base_consumption = card.consumption_value
-    damage = get_effective_consumption_value(player, card, config)
+    damage = _normal_effective_consumption_for_round(
+        player=player,
+        card=card,
+        config=config,
+        received_critical_wound=received_critical_wound,
+    )
     consumption_reason = None
-    if (
-        get_active_own_animal_effect_id(player, card, config)
-        == CONIGLIO_PASSO_LEGGERO
-        and _has_other_live_printed_two(player.player_id, player_map, selected_cards)
-    ):
-        damage = 3
-        consumption_reason = "shared_printed_2"
+    effect_id = get_active_own_animal_effect_id(player, card, config)
+    if effect_id == CONIGLIO_PASSO_LEGGERO and not received_critical_wound:
+        consumption_reason = "no_affamato"
+    elif effect_id == PANDA_RESPIRO_LENTO and not received_critical_wound:
+        panda_wounds_before_current = player.critical_wounds - (
+            1 if received_critical_wound else 0
+        )
+        if panda_wounds_before_current >= 2:
+            consumption_reason = "has_at_least_2_affamato"
     _collect_consumption_animal_event(
         player=player,
         card=card,
@@ -1448,7 +1442,25 @@ def _calculate_base_damage_with_critical_effects(
         animal_events=animal_events,
         reason=consumption_reason,
     )
-    if RAZIONE_RISPARMIATA in active_effects:
+    if has_grande_balzo_debt:
+        debt_before = damage
+        damage = apply_coniglio_grande_balzo_debt(debt_before)
+        animal_events.append(
+            _animal_event(
+                player=player,
+                card=card,
+                effect_id=CONIGLIO_GRANDE_BALZO,
+                effect_name="Grande Balzo",
+                timing="consumption",
+                status="applied",
+                value_before=debt_before,
+                value_after=damage,
+                amount=damage - debt_before,
+                actual_amount=damage,
+                reason="triple_debt_applied",
+            )
+        )
+    if RAZIONE_RISPARMIATA in active_effects and damage > 0:
         before = damage
         damage = max(1, damage - 1)
         prevented = before - damage
@@ -1469,7 +1481,8 @@ def _calculate_base_damage_with_critical_effects(
         reduction = 2 if SANGUE_FREDDO in active_effects else 1
         damage -= reduction
 
-    final_damage = max(1, damage)
+    minimum_damage = 0 if effect_id == CONIGLIO_GRANDE_BALZO else 1
+    final_damage = max(minimum_damage, damage)
     if SANGUE_FREDDO in active_effects:
         prevented = 1 if color_effects_enabled and card.color == player.color else 0
         critical_events.append(
@@ -1490,6 +1503,30 @@ def _calculate_base_damage_with_critical_effects(
         player.damage_prevented_by_critical_cards += prevented
 
     return final_damage
+
+
+def _normal_effective_consumption_for_round(
+    player: PlayerState,
+    card: Card,
+    config: GameConfig,
+    received_critical_wound: bool,
+) -> int:
+    """Return normal same-round consumption before special debt multipliers."""
+
+    effect_id = get_active_own_animal_effect_id(player, card, config)
+    consumption = card.consumption_value
+    if effect_id == PANDA_RESPIRO_LENTO:
+        wounds_before_current = player.critical_wounds - (
+            1 if received_critical_wound else 0
+        )
+        if wounds_before_current >= 2:
+            consumption = 2
+    elif effect_id == CONIGLIO_PASSO_LEGGERO and not received_critical_wound:
+        consumption = 1
+    elif effect_id == CONIGLIO_GRANDE_BALZO:
+        consumption = 0
+
+    return max(0, consumption)
 
 
 def _calculate_extra_damage_with_critical_effects(
@@ -1754,5 +1791,20 @@ def _consume_active_animal_effects(
                             effect_name="Grande Letargo",
                             timing="next_round_consume",
                             status="consumed",
+                        )
+                    )
+                elif (
+                    effect_id == CONIGLIO_GRANDE_BALZO_DEBT
+                    and player_id in selected_cards
+                ):
+                    animal_events.append(
+                        _animal_event(
+                            player=player,
+                            card=selected_cards[player_id],
+                            effect_id=CONIGLIO_GRANDE_BALZO,
+                            effect_name="Grande Balzo",
+                            timing="next_round_consume",
+                            status="consumed",
+                            reason="triple_debt_consumed",
                         )
                     )

@@ -204,7 +204,7 @@ def test_riposo_forzato_keeps_panda_one_printed_values_unchanged():
     assert get_effective_consumption_value(player, card, _animal_config()) == 1
 
 
-def test_respiro_lento_reduces_own_panda_three_consumption_by_one():
+def test_respiro_lento_stays_three_with_zero_affamato():
     player = PlayerState(player_id=1, color=Color.BLUE, lives=12)
     card = Card(Color.BLUE, 3)
     config = _animal_config()
@@ -212,8 +212,29 @@ def test_respiro_lento_reduces_own_panda_three_consumption_by_one():
     assert card.value == 3
     assert card.consumption_value == 3
     assert card.comparison_value == 3
-    assert get_effective_consumption_value(player, card, config) == 2
+    assert get_effective_consumption_value(player, card, config) == 3
     assert get_effective_comparison_value(player, card, config) == 3
+
+
+def test_respiro_lento_stays_three_with_one_affamato():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=1)
+    card = Card(Color.BLUE, 3)
+
+    assert get_effective_consumption_value(player, card, _animal_config()) == 3
+
+
+def test_respiro_lento_reduces_own_panda_three_with_two_affamato():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=2)
+    card = Card(Color.BLUE, 3)
+
+    assert get_effective_consumption_value(player, card, _animal_config()) == 2
+
+
+def test_respiro_lento_reduces_own_panda_three_with_three_affamato():
+    player = PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=3)
+    card = Card(Color.BLUE, 3)
+
+    assert get_effective_consumption_value(player, card, _animal_config()) == 2
 
 
 def test_respiro_lento_is_inactive_when_animal_effects_are_disabled():
@@ -233,7 +254,7 @@ def test_respiro_lento_is_inactive_when_other_animals_play_panda_three():
         assert get_effective_comparison_value(player, card, _animal_config()) == 3
 
 
-def test_round_base_consumption_uses_respiro_lento_when_panda_is_not_affamato():
+def test_round_base_consumption_keeps_respiro_lento_at_three_below_threshold():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -246,13 +267,13 @@ def test_round_base_consumption_uses_respiro_lento_when_panda_is_not_affamato():
     result = resolve_round(players, selected_cards, _animal_config())
 
     assert result.critical_wound_players == [2]
-    assert result.base_damage_by_player[1] == 2
-    assert players[0].lives == 10
+    assert result.base_damage_by_player[1] == 3
+    assert players[0].lives == 9
 
 
-def test_round_logs_respiro_lento_consumption_animal_event():
+def test_round_logs_respiro_lento_consumption_animal_event_at_two_affamato():
     players = [
-        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=1, color=Color.BLUE, lives=12, critical_wounds=2),
         PlayerState(player_id=2, color=Color.RED, lives=12),
     ]
     selected_cards = {
@@ -279,6 +300,8 @@ def test_round_logs_respiro_lento_consumption_animal_event():
     assert event.value_before == 3
     assert event.value_after == 2
     assert event.amount == 1
+    assert event.actual_amount == 1
+    assert event.reason == "has_at_least_2_affamato"
 
 
 def test_respiro_lento_does_not_make_affamato_panda_consume_two():
@@ -331,8 +354,8 @@ def test_respiro_lento_combines_with_razione_risparmiata_to_minimum_one():
     result = resolve_round(players, selected_cards, config)
 
     assert result.critical_wound_players == [2]
-    assert result.base_damage_by_player[1] == 1
-    assert players[0].lives == 11
+    assert result.base_damage_by_player[1] == 2
+    assert players[0].lives == 10
     assert players[0].consumed_critical_effects == [RAZIONE_RISPARMIATA]
 
 
@@ -350,15 +373,16 @@ def test_grande_letargo_registers_next_round_without_changing_current_comparison
     ]
     selected_cards = {
         1: Card(Color.BLUE, 5),
-        2: Card(Color.RED, 4),
+        2: Card(Color.RED, 3),
     }
 
     result = resolve_round(players, selected_cards, _animal_config())
 
-    assert result.lowest_value == 5
-    assert result.critical_wound_players == [1, 2]
+    assert result.selected_cards[1].value == 5
+    assert result.lowest_value == 3
+    assert result.critical_wound_players == [2]
     assert players[0].active_animal_effects == [PANDA_GRANDE_LETARGO]
-    assert result.base_damage_by_player[1] == 0
+    assert result.base_damage_by_player[1] == 5
     letargo_events = [
         event
         for event in result.animal_events
@@ -382,11 +406,12 @@ def test_grande_letargo_registers_even_when_panda_receives_affamato():
     ]
     selected_cards = {
         1: Card(Color.BLUE, 5),
-        2: Card(Color.RED, 4),
+        2: Card(Color.RED, 5),
     }
 
     result = resolve_round(players, selected_cards, _animal_config())
 
+    assert result.lowest_value == 5
     assert 1 in result.critical_wound_players
     assert result.base_damage_by_player[1] == 0
     assert players[0].active_animal_effects == [PANDA_GRANDE_LETARGO]
@@ -641,6 +666,7 @@ def test_grande_letargo_active_keeps_respiro_lento_consumption_reduction():
         player_id=1,
         color=Color.BLUE,
         lives=12,
+        critical_wounds=2,
         active_animal_effects=[PANDA_GRANDE_LETARGO],
     )
     card = Card(Color.BLUE, 3)
@@ -701,7 +727,7 @@ def test_coniglio_effects_continue_to_use_their_effective_values():
         coniglio,
         Card(Color.RED, 4),
         _animal_config(),
-    ) == 5
+    ) == 4
 
 
 def test_panda_one_and_inactive_panda_five_keep_standard_values():

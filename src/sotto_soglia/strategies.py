@@ -13,8 +13,10 @@ from sotto_soglia.config import GameConfig
 from sotto_soglia.critical import COLPO_DI_CODA, SONO_ANCORA_QUI
 from sotto_soglia.models import Card, Color, PlayerState
 from sotto_soglia.rules import (
+    apply_coniglio_grande_balzo_debt,
     get_effective_comparison_value,
     get_effective_consumption_value,
+    has_coniglio_grande_balzo_debt,
 )
 
 
@@ -357,18 +359,27 @@ def _rank_v05_animal_aware_candidates(
     scored_candidates = []
     for ranked in balanced_candidates:
         candidate = ranked.candidate
+        strategy_consumption = candidate.effective_consumption
+        debt_extra_penalty = 0.0
+        if has_coniglio_grande_balzo_debt(player, config):
+            strategy_consumption = apply_coniglio_grande_balzo_debt(
+                candidate.effective_consumption
+            )
+            debt_extra_penalty = (
+                strategy_consumption - candidate.effective_consumption
+            ) * 3.0
         adjustment = _v05_animal_aware_adjustment(
             player,
             ranked.card,
             candidate.effective_comparison,
-            candidate.effective_consumption,
+            strategy_consumption,
             lowest_hand_comparison,
             config,
         )
-        points = candidate.score + adjustment
+        points = candidate.score + adjustment - debt_extra_penalty
         sort_key = (
             points,
-            -candidate.effective_consumption,
+            -strategy_consumption,
             candidate.effective_comparison,
             -ranked.card.value,
             -_color_order(ranked.card.color),
@@ -377,7 +388,7 @@ def _rank_v05_animal_aware_candidates(
             (
                 ranked.card,
                 candidate.effective_comparison,
-                candidate.effective_consumption,
+                strategy_consumption,
                 points,
                 sort_key,
             )
