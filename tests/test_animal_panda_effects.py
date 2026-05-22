@@ -696,7 +696,7 @@ def test_coniglio_effects_continue_to_use_their_effective_values():
         coniglio,
         Card(Color.RED, 2),
         _animal_config(),
-    ) == 1
+    ) == 2
     assert get_effective_comparison_value(
         coniglio,
         Card(Color.RED, 4),

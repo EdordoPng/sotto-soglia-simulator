@@ -182,6 +182,13 @@ def resolve_round(
         config,
         effective_comparison_values,
     )
+    _apply_passo_leggero_shared_two_comparison(
+        player_map,
+        selected_cards,
+        config,
+        effective_comparison_values,
+        animal_events,
+    )
     _apply_animal_comparison_effects(
         player_map,
         selected_cards,
@@ -272,6 +279,8 @@ def resolve_round(
             game_id=game_id,
             round_number=round_number,
             animal_events=animal_events,
+            selected_cards=selected_cards,
+            player_map=player_map,
         )
         for player_id, card in selected_cards.items()
     }
@@ -614,6 +623,7 @@ def _collect_consumption_animal_event(
     value_before: int,
     value_after: int,
     animal_events: list[AnimalEffectEvent],
+    reason: str | None = None,
 ) -> None:
     """Collect telemetry for animal effects that change base consumption."""
 
@@ -629,6 +639,7 @@ def _collect_consumption_animal_event(
                 status="applied",
                 value_before=value_before,
                 value_after=value_after,
+                reason=reason,
             )
         )
     elif effect_id == PANDA_RESPIRO_LENTO and value_after != value_before:
@@ -643,6 +654,55 @@ def _collect_consumption_animal_event(
                 value_before=value_before,
                 value_after=value_after,
                 amount=1,
+            )
+        )
+
+
+def _has_other_live_printed_two(
+    player_id: int,
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+) -> bool:
+    """Return whether another live player revealed a printed 2 this round."""
+
+    return any(
+        other_player_id != player_id
+        and player_map[other_player_id].is_alive
+        and other_card.value == 2
+        for other_player_id, other_card in selected_cards.items()
+    )
+
+
+def _apply_passo_leggero_shared_two_comparison(
+    player_map: Mapping[int, PlayerState],
+    selected_cards: Mapping[int, Card],
+    config: GameConfig,
+    effective_comparison_values: dict[int, int],
+    animal_events: list[AnimalEffectEvent],
+) -> None:
+    """Apply Passo Leggero's shared printed-2 comparison effect."""
+
+    for player_id, card in selected_cards.items():
+        player = player_map[player_id]
+        effect_id = get_active_own_animal_effect_id(player, card, config)
+        if effect_id != CONIGLIO_PASSO_LEGGERO:
+            continue
+        if not _has_other_live_printed_two(player_id, player_map, selected_cards):
+            continue
+
+        value_before = effective_comparison_values[player_id]
+        effective_comparison_values[player_id] = 3
+        animal_events.append(
+            _animal_event(
+                player=player,
+                card=card,
+                effect_id=CONIGLIO_PASSO_LEGGERO,
+                effect_name="Passo Leggero",
+                timing="comparison",
+                status="applied",
+                value_before=value_before,
+                value_after=3,
+                reason="shared_printed_2",
             )
         )
 
@@ -1351,6 +1411,8 @@ def _calculate_base_damage_with_critical_effects(
     game_id: int,
     round_number: int,
     animal_events: list[AnimalEffectEvent],
+    selected_cards: Mapping[int, Card],
+    player_map: Mapping[int, PlayerState],
 ) -> int:
     """Calculate base damage with supported next-round critical effects."""
 
@@ -1369,6 +1431,14 @@ def _calculate_base_damage_with_critical_effects(
 
     base_consumption = card.consumption_value
     damage = get_effective_consumption_value(player, card, config)
+    consumption_reason = None
+    if (
+        get_active_own_animal_effect_id(player, card, config)
+        == CONIGLIO_PASSO_LEGGERO
+        and _has_other_live_printed_two(player.player_id, player_map, selected_cards)
+    ):
+        damage = 3
+        consumption_reason = "shared_printed_2"
     _collect_consumption_animal_event(
         player=player,
         card=card,
@@ -1376,6 +1446,7 @@ def _calculate_base_damage_with_critical_effects(
         value_before=base_consumption,
         value_after=damage,
         animal_events=animal_events,
+        reason=consumption_reason,
     )
     if RAZIONE_RISPARMIATA in active_effects:
         before = damage

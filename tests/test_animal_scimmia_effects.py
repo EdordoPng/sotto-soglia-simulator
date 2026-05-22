@@ -317,7 +317,8 @@ def test_buccia_di_banana_respiro_calmo_blocks_reduction_without_retargeting():
     )
 
     assert result.lowest_value == 2
-    assert result.critical_wound_players == [1, 2, 3]
+    assert result.critical_wound_players == [1, 2]
+    assert players[2].critical_wounds == 0
     assert players[1].critical_wounds == 1
     buccia_events = [
         event
@@ -1099,7 +1100,7 @@ def test_coniglio_effects_continue_to_work_with_scimmia_effects_enabled():
         coniglio,
         Card(Color.RED, 2),
         _animal_config(),
-    ) == 1
+    ) == 2
     assert get_effective_comparison_value(
         coniglio,
         Card(Color.RED, 4),

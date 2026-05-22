@@ -7,7 +7,6 @@ from collections.abc import Iterable, Mapping
 
 from sotto_soglia.animal_effects import (
     CONIGLIO_GRANDE_BALZO,
-    CONIGLIO_PASSO_LEGGERO,
     CONIGLIO_SCATTO_IMPROVVISO,
     PANDA_GRANDE_LETARGO,
     PANDA_RESPIRO_LENTO,
@@ -97,9 +96,6 @@ def get_effective_consumption_value(
     """Return the consumption value for a card as played by one player."""
 
     effect_id = get_active_own_animal_effect_id(player, card, config)
-    if effect_id == CONIGLIO_PASSO_LEGGERO:
-        return 1
-
     consumption = card.consumption_value
     if effect_id == PANDA_RESPIRO_LENTO:
         consumption -= 1

@@ -5,7 +5,6 @@ from random import Random
 from typing import Any
 
 from sotto_soglia.animal_effects import (
-    Animal,
     ANIMAL_DISPLAY_NAMES,
     get_animal_for_color,
     get_display_color_for_technical_color,
@@ -301,7 +300,9 @@ def _rank_v05_balanced_candidates(
 def _v05_animal_aware_adjustment(
     player: PlayerState,
     card: Card,
+    comparison: int,
     consumption: int,
+    lowest_hand_comparison: int,
     config: GameConfig,
 ) -> float:
     """Return the v05_animal_aware score adjustment for one candidate."""
@@ -311,23 +312,30 @@ def _v05_animal_aware_adjustment(
     adjustment = 0.0
 
     if card_animal == player_animal:
-        own_card_bonus = {
-            Animal.PANDA: 1.0,
-            Animal.CONIGLIO: 1.0,
-            Animal.SCIMMIA: 0.75,
-            Animal.SCOIATTOLO: 1.0,
-        }
-        adjustment += own_card_bonus[player_animal]
+        adjustment += 1.0
 
-    if player_animal == Animal.CONIGLIO and card.color == Color.RED:
-        if card.value == 2:
-            adjustment += 1.25
-        near_abandonment = player.critical_wounds >= config.critical_wounds_limit - 1
-        if near_abandonment and card.value in {1, 4}:
-            adjustment += 1.25
+    critical_remaining = config.critical_wounds_limit - player.critical_wounds
+    remaining_lives = player.lives - consumption
+    comparison_risk = max(0, 3 - comparison)
+    lowest_penalty = 1.0 if comparison == lowest_hand_comparison else 0.0
 
-    if player_animal != Animal.PANDA and card.color == Color.BLUE and card.value == 3:
-        adjustment -= 1.0
+    if critical_remaining <= 1:
+        adjustment -= comparison_risk * 1.4
+        adjustment -= lowest_penalty * 1.2
+        if comparison >= 4:
+            adjustment += 1.0
+    elif critical_remaining == 2:
+        adjustment -= comparison_risk * 0.7
+        adjustment -= lowest_penalty * 0.6
+        if comparison >= 4:
+            adjustment += 0.4
+
+    if consumption >= player.lives:
+        adjustment -= 30.0
+    elif remaining_lives <= 1:
+        adjustment -= 8.0
+    elif remaining_lives == 2:
+        adjustment -= 4.0
 
     return adjustment
 
@@ -352,7 +360,9 @@ def _rank_v05_animal_aware_candidates(
         adjustment = _v05_animal_aware_adjustment(
             player,
             ranked.card,
+            candidate.effective_comparison,
             candidate.effective_consumption,
+            lowest_hand_comparison,
             config,
         )
         points = candidate.score + adjustment

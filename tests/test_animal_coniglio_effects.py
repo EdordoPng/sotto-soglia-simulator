@@ -69,14 +69,14 @@ def test_scatto_improvviso_is_inactive_when_other_animal_plays_coniglio_one():
         assert get_effective_comparison_value(player, card, _animal_config()) == 1
 
 
-def test_passo_leggero_sets_own_coniglio_two_effective_consumption_to_one():
+def test_passo_leggero_has_no_context_free_effective_value_change():
     player = PlayerState(player_id=1, color=Color.RED, lives=12)
     card = Card(Color.RED, 2)
 
     assert card.value == 2
     assert card.consumption_value == 2
     assert card.comparison_value == 2
-    assert get_effective_consumption_value(player, card, _animal_config()) == 1
+    assert get_effective_consumption_value(player, card, _animal_config()) == 2
     assert get_effective_comparison_value(player, card, _animal_config()) == 2
 
 
@@ -204,7 +204,7 @@ def test_round_does_not_log_scatto_improvviso_when_animals_disabled():
     assert result.animal_events == []
 
 
-def test_round_base_consumption_uses_passo_leggero_when_coniglio_is_not_affamato():
+def test_round_passo_leggero_stays_two_when_coniglio_is_only_printed_two():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
@@ -217,38 +217,68 @@ def test_round_base_consumption_uses_passo_leggero_when_coniglio_is_not_affamato
     result = resolve_round(players, selected_cards, _animal_config())
 
     assert result.critical_wound_players == [1]
-    assert result.base_damage_by_player[2] == 1
-    assert players[1].lives == 11
+    assert result.lowest_value == 1
+    assert result.base_damage_by_player[2] == 2
+    assert players[1].lives == 10
+    assert not any(
+        event.effect_id == CONIGLIO_PASSO_LEGGERO
+        for event in result.animal_events
+    )
 
 
-def test_round_logs_passo_leggero_consumption_animal_event():
+def test_round_passo_leggero_shared_printed_two_sets_comparison_and_consumption_to_three():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
     ]
     selected_cards = {
-        1: Card(Color.BLUE, 1),
+        1: Card(Color.BLUE, 2),
         2: Card(Color.RED, 2),
     }
 
     result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.lowest_value == 2
+    assert result.critical_wound_players == [1]
+    assert result.base_damage_by_player[2] == 3
+    assert players[1].lives == 9
 
     passo_events = [
         event
         for event in result.animal_events
         if event.effect_id == CONIGLIO_PASSO_LEGGERO
     ]
-    assert len(passo_events) == 1
-    event = passo_events[0]
-    assert event.effect_id == CONIGLIO_PASSO_LEGGERO
-    assert event.effect_name == "Passo Leggero"
-    assert event.timing == "consumption"
-    assert event.status == "applied"
-    assert event.player_id == 2
-    assert event.card_color == "RED"
-    assert event.card_value == 2
-    assert event.value_before == 2
-    assert event.value_after == 1
+    assert {
+        (event.timing, event.value_before, event.value_after, event.reason)
+        for event in passo_events
+    } == {
+        ("comparison", 2, 3, "shared_printed_2"),
+        ("consumption", 2, 3, "shared_printed_2"),
+    }
+
+
+def test_round_passo_leggero_counts_other_printed_two_even_if_effective_value_differs():
+    players = [
+        PlayerState(player_id=1, color=Color.BLUE, lives=12),
+        PlayerState(player_id=2, color=Color.RED, lives=12),
+    ]
+    selected_cards = {
+        1: Card(Color.BLUE, 2, custom_comparison_value=5),
+        2: Card(Color.RED, 2),
+    }
+
+    result = resolve_round(players, selected_cards, _animal_config())
+
+    assert result.lowest_value == 3
+    assert result.critical_wound_players == [2]
+    assert result.base_damage_by_player[2] == 0
+    assert players[1].lives == 12
+    assert any(
+        event.effect_id == CONIGLIO_PASSO_LEGGERO
+        and event.timing == "comparison"
+        and event.value_after == 3
+        for event in result.animal_events
+    )
 
 
 def test_round_base_consumption_keeps_coniglio_two_standard_when_animals_disabled():
@@ -285,13 +315,13 @@ def test_round_base_consumption_keeps_coniglio_two_standard_for_other_animal():
     assert players[0].lives == 10
 
 
-def test_passo_leggero_does_not_make_affamato_coniglio_consume_one():
+def test_passo_leggero_shared_printed_two_affamato_coniglio_still_consumes_zero():
     players = [
         PlayerState(player_id=1, color=Color.BLUE, lives=12),
         PlayerState(player_id=2, color=Color.RED, lives=12),
     ]
     selected_cards = {
-        1: Card(Color.BLUE, 3),
+        1: Card(Color.BLUE, 2, custom_comparison_value=4),
         2: Card(Color.RED, 2),
     }
 
@@ -300,8 +330,15 @@ def test_passo_leggero_does_not_make_affamato_coniglio_consume_one():
     assert result.critical_wound_players == [2]
     assert result.base_damage_by_player[2] == 0
     assert players[1].lives == 12
+    assert any(
+        event.effect_id == CONIGLIO_PASSO_LEGGERO
+        and event.timing == "comparison"
+        and event.value_after == 3
+        for event in result.animal_events
+    )
     assert not any(
         event.effect_id == CONIGLIO_PASSO_LEGGERO
+        and event.timing == "consumption"
         for event in result.animal_events
     )
 

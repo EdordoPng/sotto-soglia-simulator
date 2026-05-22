@@ -796,7 +796,8 @@ def test_animal_effect_events_csv_exports_k2_and_k6_effects(tmp_path):
             timing="consumption",
             status="applied",
             value_before=2,
-            value_after=1,
+            value_after=3,
+            reason="shared_printed_2",
         ),
         AnimalEffectEvent(
             player_id=2,

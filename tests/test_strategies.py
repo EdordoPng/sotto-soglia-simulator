@@ -284,7 +284,7 @@ def test_v05_basic_candidate_uses_effective_comparison_value():
     assert by_card[("RED", 1)].effective_comparison == 2
 
 
-def test_v05_basic_uses_effective_consumption_value():
+def test_v05_basic_uses_pre_reveal_coniglio_two_consumption_value():
     config = GameConfig(
         color_effects_enabled=False,
         animal_card_effects_enabled=True,
@@ -302,7 +302,7 @@ def test_v05_basic_uses_effective_consumption_value():
         Random(1),
     )
 
-    assert selected == passo_leggero
+    assert selected in hand
 
 
 def test_v05_basic_candidate_uses_effective_consumption_value():
@@ -323,7 +323,7 @@ def test_v05_basic_candidate_uses_effective_consumption_value():
         for candidate in candidates
     }
 
-    assert by_card[("RED", 2)].effective_consumption == 1
+    assert by_card[("RED", 2)].effective_consumption == 2
 
 
 def test_v05_basic_avoids_lethal_consumption_when_possible():
@@ -543,7 +543,7 @@ def test_v05_balanced_candidate_uses_effective_comparison_value():
     assert by_card[("RED", 1)].effective_comparison == 2
 
 
-def test_v05_balanced_uses_effective_consumption_value():
+def test_v05_balanced_uses_pre_reveal_coniglio_two_consumption_value():
     config = GameConfig(
         color_effects_enabled=False,
         animal_card_effects_enabled=True,
@@ -560,7 +560,7 @@ def test_v05_balanced_uses_effective_consumption_value():
         Random(1),
     )
 
-    assert selected == passo_leggero
+    assert selected in [printed_two, passo_leggero]
 
 
 def test_v05_balanced_candidate_uses_effective_consumption_value():
@@ -581,7 +581,7 @@ def test_v05_balanced_candidate_uses_effective_consumption_value():
         for candidate in candidates
     }
 
-    assert by_card[("RED", 2)].effective_consumption == 1
+    assert by_card[("RED", 2)].effective_consumption == 2
 
 
 def test_v05_balanced_avoids_lethal_consumption_when_possible():
@@ -989,40 +989,26 @@ def test_v05_animal_aware_prefers_own_card_when_base_scores_are_close():
     assert animal_aware_selected == Card(Color.YELLOW, 3)
 
 
-def test_v05_animal_aware_improves_coniglio_red_2_ranking():
+def test_v05_animal_aware_keeps_only_own_bonus_for_coniglio_red_2_without_risk_pressure():
     player = PlayerState(player_id=1, color=Color.RED, lives=12)
     opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
     red_2 = Card(Color.RED, 2)
-    efficient_blue_3 = Card(Color.BLUE, 3, custom_consumption_value=2)
-    hand = [red_2, efficient_blue_3]
+    hand = [red_2, Card(Color.GREEN, 4)]
     game_state = _v05_game_state(player, opponent)
 
-    balanced_candidates = V05BalancedStrategy().evaluate_candidates(
-        player,
-        hand,
-        game_state,
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        red_2,
     )
-    animal_aware_candidates = V05AnimalAwareStrategy().evaluate_candidates(
-        player,
-        hand,
-        game_state,
-    )
-    balanced_red_2 = next(
-        candidate
-        for candidate in balanced_candidates
-        if _candidate_card_tuple(candidate) == ("RED", 2)
-    )
-    animal_aware_red_2 = next(
-        candidate
-        for candidate in animal_aware_candidates
-        if _candidate_card_tuple(candidate) == ("RED", 2)
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        red_2,
     )
 
-    assert balanced_red_2.choice_rank > animal_aware_red_2.choice_rank
-    assert animal_aware_red_2.chosen
+    assert animal_aware.score - balanced.score == 1.0
 
 
-def test_v05_animal_aware_boosts_coniglio_red_1_near_abandonment():
+def test_v05_animal_aware_has_no_special_coniglio_red_1_near_abandonment_bonus():
     config = get_v05_config_for_players(2)
     player = PlayerState(
         player_id=1,
@@ -1044,12 +1030,11 @@ def test_v05_animal_aware_boosts_coniglio_red_1_near_abandonment():
         red_1,
     )
 
-    assert animal_aware.score > balanced.score
-    assert animal_aware.score - balanced.score == 2.25
+    assert round(animal_aware.score - balanced.score, 6) == -1.6
     assert "near_abandonment" in animal_aware.reason_flags
 
 
-def test_v05_animal_aware_boosts_coniglio_red_4_near_abandonment():
+def test_v05_animal_aware_has_no_special_coniglio_red_4_near_abandonment_bonus():
     config = get_v05_config_for_players(2)
     player = PlayerState(
         player_id=1,
@@ -1073,11 +1058,11 @@ def test_v05_animal_aware_boosts_coniglio_red_4_near_abandonment():
 
     assert animal_aware.choice_rank == 1
     assert animal_aware.score > balanced.score
-    assert animal_aware.score - balanced.score == 2.25
+    assert animal_aware.score - balanced.score == 2.0
     assert "near_abandonment" in animal_aware.reason_flags
 
 
-def test_v05_animal_aware_does_not_add_near_abandonment_bonus_to_coniglio_red_2():
+def test_v05_animal_aware_near_abandonment_red_2_has_no_old_special_bonus():
     config = get_v05_config_for_players(2)
     player = PlayerState(
         player_id=1,
@@ -1099,24 +1084,26 @@ def test_v05_animal_aware_does_not_add_near_abandonment_bonus_to_coniglio_red_2(
         red_2,
     )
 
-    assert animal_aware.score - balanced.score == 2.25
+    assert round(animal_aware.score - balanced.score, 6) == -1.6
 
 
-def test_v05_animal_aware_non_panda_blue_3_does_not_beat_close_good_own_card():
+def test_v05_animal_aware_non_panda_blue_3_has_no_special_penalty():
     player = PlayerState(player_id=1, color=Color.YELLOW, lives=12)
     opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
     blue_3 = Card(Color.BLUE, 3, custom_consumption_value=2)
-    own_preparation = Card(Color.YELLOW, 4, custom_consumption_value=3)
-    hand = [blue_3, own_preparation]
+    hand = [blue_3, Card(Color.GREEN, 4)]
+    game_state = _v05_game_state(player, opponent)
 
-    selected = V05AnimalAwareStrategy().choose_card(
-        player,
-        hand,
-        _v05_game_state(player, opponent),
-        Random(1),
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        blue_3,
+    )
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        blue_3,
     )
 
-    assert selected == own_preparation
+    assert animal_aware.score == balanced.score
 
 
 def test_v05_animal_aware_panda_can_still_choose_blue_3_when_sensible():
@@ -1133,6 +1120,25 @@ def test_v05_animal_aware_panda_can_still_choose_blue_3_when_sensible():
     )
 
     assert selected == blue_3
+
+
+def test_v05_animal_aware_scimmia_own_card_bonus_is_one():
+    player = PlayerState(player_id=1, color=Color.GREEN, lives=12)
+    opponent = PlayerState(player_id=2, color=Color.RED, lives=12)
+    own_card = Card(Color.GREEN, 3)
+    hand = [own_card, Card(Color.YELLOW, 3)]
+    game_state = _v05_game_state(player, opponent)
+
+    balanced = _candidate_by_card(
+        V05BalancedStrategy().evaluate_candidates(player, hand, game_state),
+        own_card,
+    )
+    animal_aware = _candidate_by_card(
+        V05AnimalAwareStrategy().evaluate_candidates(player, hand, game_state),
+        own_card,
+    )
+
+    assert animal_aware.score - balanced.score == 1.0
 
 
 def test_v05_animal_aware_scimmia_bonus_does_not_override_clear_safety():
@@ -1185,6 +1191,45 @@ def test_v05_animal_aware_scoiattolo_preparation_keeps_only_own_card_bonus():
 
     assert animal_aware.score - balanced.score == 1.0
     assert animal_aware.chosen
+
+
+def test_v05_animal_aware_near_affamato_prefers_safer_comparison_when_consumption_survives():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(
+        player_id=1,
+        color=Color.RED,
+        lives=10,
+        critical_wounds=config.critical_wounds_limit - 1,
+    )
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    low_consumption_risky = Card(Color.RED, 2)
+    safer_comparison = Card(Color.GREEN, 4)
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        [low_consumption_risky, safer_comparison],
+        _v05_game_state(player, opponent, config=config),
+        Random(1),
+    )
+
+    assert selected == safer_comparison
+
+
+def test_v05_animal_aware_low_scorte_prefers_avoiding_near_lethal_consumption():
+    config = get_v05_config_for_players(2)
+    player = PlayerState(player_id=1, color=Color.RED, lives=5)
+    opponent = PlayerState(player_id=2, color=Color.BLUE, lives=12)
+    costly_safe_comparison = Card(Color.GREEN, 4)
+    cheap_risky_comparison = Card(Color.RED, 2)
+
+    selected = V05AnimalAwareStrategy().choose_card(
+        player,
+        [costly_safe_comparison, cheap_risky_comparison],
+        _v05_game_state(player, opponent, config=config),
+        Random(1),
+    )
+
+    assert selected == cheap_risky_comparison
 
 
 def test_simulation_runner_smoke_with_v05_animal_aware_strategy():
