@@ -128,8 +128,8 @@ def test_simulation_config_json_is_valid(tmp_path):
     assert data["players_count"] == 4
     assert data["games_count"] == 5
     assert data["base_seed"] == 42
-    assert data["initial_lives"] == 24
-    assert data["critical_wounds_limit"] == 4
+    assert data["initial_lives"] == 21
+    assert data["critical_wounds_limit"] == 5
     assert data["cards_per_player"] == 3
     assert data["color_effects_enabled"] is False
     assert data["critical_card_effects_enabled"] is True

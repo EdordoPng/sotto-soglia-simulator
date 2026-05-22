@@ -54,9 +54,9 @@ def test_game_config_keeps_legacy_numeric_defaults():
 @pytest.mark.parametrize(
     ("players_count", "initial_lives", "critical_wounds_limit"),
     [
-        (2, 12, 5),
-        (3, 17, 4),
-        (4, 24, 4),
+        (2, 12, 6),
+        (3, 15, 5),
+        (4, 21, 5),
     ],
 )
 def test_v05_config_for_players_returns_numeric_presets(
@@ -94,9 +94,9 @@ def test_v05_config_for_players_uses_hunger_deck_profile():
 @pytest.mark.parametrize(
     ("players_count", "initial_lives", "critical_wounds_limit"),
     [
-        (2, 12, 5),
-        (3, 17, 4),
-        (4, 24, 4),
+        (2, 12, 6),
+        (3, 15, 5),
+        (4, 21, 5),
     ],
 )
 def test_cli_config_uses_v05_numeric_presets_without_manual_overrides(
@@ -224,8 +224,8 @@ def test_cli_config_rejects_unknown_animal_lineup():
 def test_simulation_runner_uses_v05_preset_when_config_is_omitted():
     result = SimulationRunner().run(players_count=3, games_count=1, seed=42)
 
-    assert result.initial_lives == 17
-    assert result.critical_wounds_limit == 4
+    assert result.initial_lives == 15
+    assert result.critical_wounds_limit == 5
     assert result.color_effects_enabled is False
     assert result.critical_card_effects_enabled is True
     assert result.animal_card_effects_enabled is True

@@ -12,21 +12,21 @@ from sotto_soglia.models import Color
 V05_PLAYER_PRESETS = {
     2: {
         "initial_lives": 12,
-        "critical_wounds_limit": 5,
+        "critical_wounds_limit": 6,
         "color_effects_enabled": False,
         "critical_card_effects_enabled": True,
         "animal_card_effects_enabled": True,
     },
     3: {
-        "initial_lives": 17,
-        "critical_wounds_limit": 4,
+        "initial_lives": 15,
+        "critical_wounds_limit": 5,
         "color_effects_enabled": False,
         "critical_card_effects_enabled": True,
         "animal_card_effects_enabled": True,
     },
     4: {
-        "initial_lives": 24,
-        "critical_wounds_limit": 4,
+        "initial_lives": 21,
+        "critical_wounds_limit": 5,
         "color_effects_enabled": False,
         "critical_card_effects_enabled": True,
         "animal_card_effects_enabled": True,
